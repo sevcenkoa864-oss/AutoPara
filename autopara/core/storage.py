@@ -1,5 +1,8 @@
 """SQLite persistence. The database is the single source of truth for the whole app.
 
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
+
+
 The schema is documented in docs/BACKEND.md section 3. The one invariant worth restating here:
 ``occurrences`` carries ``UNIQUE(lesson_id, occur_date)`` and the scheduler inserts that row
 *before* opening a browser, so "open each class exactly once" is enforced by the database rather
@@ -9,19 +12,25 @@ than by in-memory bookkeeping.
 from __future__ import annotations
 
 import os
+import shutil
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 
+import logging
+
 from ..importer.schedule_parser import ParsedCourse
 from .models import (
     CATCHUP_NOTIFY,
+    THEME_SYSTEM,
     Course,
     Group,
     Lesson,
     Occurrence,
     Settings,
 )
+
+log = logging.getLogger(__name__)
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -85,9 +94,19 @@ CREATE INDEX IF NOT EXISTS idx_occurrences_date ON occurrences(occur_date);
 _DEFAULTS = {
     "lead_minutes": "1",
     "class_duration_minutes": "80",
-    "autostart_enabled": "0",
+    # Autostart is on out of the box: the installer writes the same Run entry, and an app whose
+    # whole purpose is to open classes while you are elsewhere is useless if it is not running.
+    "autostart_enabled": "1",
     "catchup_mode": CATCHUP_NOTIFY,
     "last_import_path": "",
+    "notifications_enabled": "1",
+    "notify_minutes": "10",
+    # Set on every import. The scheduler ignores anything that had already started by then --
+    # see "The schedule starts when it is imported" in docs/BACKEND.md section 4.
+    "schedule_active_from": "",
+    "schedule_copy_path": "",
+    # A fresh install follows the Windows app theme; the toolbar toggle pins light or dark.
+    "theme": THEME_SYSTEM,
 }
 
 
@@ -97,6 +116,19 @@ def default_db_path() -> Path:
     directory = Path(base) / "AutoPara"
     directory.mkdir(parents=True, exist_ok=True)
     return directory / "autopara.db"
+
+
+def schedules_dir(db_path: str | Path | None = None) -> Path:
+    """Where the imported ``.docx`` is kept.
+
+    The app copies the document rather than remembering where it came from: the original is
+    usually a download that gets tidied away, and losing it should not cost the user their ability
+    to re-import. The copy lives beside the database, so uninstalling clears it with everything
+    else while a reinstall leaves it alone.
+    """
+    directory = Path(db_path or default_db_path()).parent / "schedules"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
 
 
 class Storage:
@@ -149,9 +181,14 @@ class Storage:
             selected_group_id=int(group_id) if group_id else None,
             lead_minutes=as_int("lead_minutes", 1),
             class_duration_minutes=as_int("class_duration_minutes", 80),
-            autostart_enabled=self.get_setting("autostart_enabled") == "1",
+            autostart_enabled=self.get_setting("autostart_enabled", "1") == "1",
             catchup_mode=self.get_setting("catchup_mode") or CATCHUP_NOTIFY,
             last_import_path=self.get_setting("last_import_path") or "",
+            notifications_enabled=self.get_setting("notifications_enabled", "1") == "1",
+            notify_minutes=as_int("notify_minutes", 10),
+            theme=self.get_setting("theme") or THEME_SYSTEM,
+            schedule_active_from=self.get_setting("schedule_active_from") or "",
+            schedule_copy_path=self.get_setting("schedule_copy_path") or "",
         )
 
     # ----------------------------------------------------------------- courses
@@ -175,6 +212,14 @@ class Storage:
             )
             for r in rows
         ]
+
+    def course(self, course_id: int) -> Course | None:
+        row = self.connection.execute(
+            "SELECT * FROM courses WHERE id = ?", (course_id,)
+        ).fetchone()
+        if not row:
+            return None
+        return Course(id=row["id"], ordinal=row["ordinal"], name=row["name"])
 
     def group(self, group_id: int) -> Group | None:
         row = self.connection.execute(
@@ -290,8 +335,48 @@ class Storage:
             self.connection.rollback()
             raise
 
+        # A new document replaces the week: every occurrence recorded against the old timetable
+        # is discarded, so a fresh import starts from a clean grid rather than showing yesterday's
+        # verdicts against today's classes.
+        self.clear_occurrences()
+
+        # A freshly imported timetable describes what happens from now on. Recording the moment
+        # lets the scheduler leave the part of today that is already over alone, instead of
+        # stamping it "missed" -- which is what importing on a Saturday used to do to the whole
+        # weekend. See docs/BACKEND.md section 4.
+        self.set_setting(
+            "schedule_active_from", datetime.now().isoformat(timespec="seconds")
+        )
         if source_path:
             self.set_setting("last_import_path", source_path)
+            copy = self.archive_schedule(source_path)
+            if copy:
+                self.set_setting("schedule_copy_path", copy)
+
+    def archive_schedule(self, source_path: str) -> str:
+        """Keep our own copy of the imported document; return its path.
+
+        Only ever one copy: a new import replaces the old document as completely as it replaces
+        the old records.
+        """
+        source = Path(source_path)
+        if not source.is_file():
+            return ""
+        directory = schedules_dir(self.path)
+        destination = directory / source.name
+        try:
+            # Re-importing *the archived copy* is an ordinary thing to do -- it is what the
+            # import dialog offers by default -- so the sweep must never delete its own source.
+            current = source.resolve()
+            for stale in directory.iterdir():
+                if stale.is_file() and stale.resolve() != current:
+                    stale.unlink()
+            if current != destination.resolve():
+                shutil.copy2(source, destination)
+            return str(destination)
+        except OSError:
+            log.exception("could not archive the imported schedule")
+            return ""
 
     # ----------------------------------------------------------------- lessons
 
@@ -396,6 +481,17 @@ class Storage:
                 )
         self.connection.commit()
 
+    def move_lesson(
+        self, lesson_id: int, day_index: int, pair: int, start_time: str, end_time: str
+    ) -> None:
+        """Drop a lesson into another day/slot, keeping everything else about it (drag & drop)."""
+        self.connection.execute(
+            "UPDATE lessons SET day_index = ?, pair = ?, start_time = ?, end_time = ? "
+            "WHERE id = ?",
+            (day_index, pair, start_time, end_time, lesson_id),
+        )
+        self.connection.commit()
+
     def delete_lesson(self, lesson_id: int) -> None:
         self.connection.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
         self.connection.commit()
@@ -420,6 +516,35 @@ class Storage:
             self.connection.rollback()
             return False
 
+    def mark_occurrence(self, lesson_id: int, day: date, status: str) -> None:
+        """Force an occurrence to ``status``, creating the row if the class never fired.
+
+        This is how the user marks a class opened or skipped by hand. It deliberately bypasses the
+        claim-before-open protocol: the row is a record of a decision the user already made, and a
+        ``skipped`` row is exactly what stops the scheduler opening that class later.
+        """
+        self.connection.execute(
+            "INSERT INTO occurrences(lesson_id, occur_date, status, fired_at) "
+            "VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(lesson_id, occur_date) DO UPDATE SET "
+            "status = excluded.status, fired_at = excluded.fired_at",
+            (lesson_id, day.isoformat(), status, datetime.now().isoformat(timespec="seconds")),
+        )
+        self.connection.commit()
+
+    def clear_occurrences(self) -> None:
+        """Forget every recorded occurrence. Used when a new document replaces the timetable."""
+        self.connection.execute("DELETE FROM occurrences")
+        self.connection.commit()
+
+    def clear_occurrence(self, lesson_id: int, day: date) -> None:
+        """Forget a mark, so the class is eligible to open again today."""
+        self.connection.execute(
+            "DELETE FROM occurrences WHERE lesson_id = ? AND occur_date = ?",
+            (lesson_id, day.isoformat()),
+        )
+        self.connection.commit()
+
     def set_occurrence_status(self, lesson_id: int, day: date, status: str) -> None:
         self.connection.execute(
             "UPDATE occurrences SET status = ?, fired_at = ? "
@@ -442,6 +567,27 @@ class Storage:
             status=row["status"],
             fired_at=row["fired_at"],
         )
+
+    def occurrences_between(self, first: date, last: date) -> dict[tuple[int, str], Occurrence]:
+        """Every occurrence in a date range, keyed by ``(lesson_id, iso date)``.
+
+        The week grid shows a whole week at a time, so it needs one query for the range rather
+        than seven for the days.
+        """
+        rows = self.connection.execute(
+            "SELECT * FROM occurrences WHERE occur_date BETWEEN ? AND ?",
+            (first.isoformat(), last.isoformat()),
+        ).fetchall()
+        return {
+            (row["lesson_id"], row["occur_date"]): Occurrence(
+                id=row["id"],
+                lesson_id=row["lesson_id"],
+                occur_date=row["occur_date"],
+                status=row["status"],
+                fired_at=row["fired_at"],
+            )
+            for row in rows
+        }
 
     def occurrences_on(self, day: date) -> dict[int, Occurrence]:
         rows = self.connection.execute(

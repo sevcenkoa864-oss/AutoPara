@@ -1,4 +1,7 @@
-"""System tray icon, menu and notifications."""
+"""Іконка в системному треї, меню та сповіщення.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
+"""
 
 from __future__ import annotations
 
@@ -8,7 +11,7 @@ from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 
 def build_icon() -> QIcon:
-    """A small calendar-ish glyph drawn in code, so the app ships without a binary asset."""
+    """Невелика «календарна» іконка, намальована кодом — застосунок не тягне бінарний ресурс."""
     pixmap = QPixmap(64, 64)
     pixmap.fill(QColor(0, 0, 0, 0))
     painter = QPainter(pixmap)
@@ -27,38 +30,38 @@ def build_icon() -> QIcon:
 
 
 class Tray(QObject):
-    """Owns the tray icon. Emits intent; the app decides what to do."""
+    """Володіє іконкою трею. Повідомляє про намір — рішення ухвалює застосунок."""
 
     show_requested = Signal()
     settings_requested = Signal()
     import_requested = Signal()
     quit_requested = Signal()
-    catchup_clicked = Signal()
+    message_clicked = Signal()
 
     def __init__(self, parent: QObject | None = None):
         super().__init__(parent)
         self.icon = QSystemTrayIcon(build_icon(), self)
-        self.icon.setToolTip("AutoPara — class auto-launcher")
+        self.icon.setToolTip("AutoPara — автозапуск пар")
         self._build_menu()
         self.icon.activated.connect(self._activated)
-        self.icon.messageClicked.connect(self.catchup_clicked.emit)
+        self.icon.messageClicked.connect(self.message_clicked.emit)
 
     def _build_menu(self) -> None:
         menu = QMenu()
-        show = QAction("Show schedule", menu)
+        show = QAction("Показати розклад", menu)
         show.triggered.connect(self.show_requested.emit)
         menu.addAction(show)
 
-        import_action = QAction("Import schedule…", menu)
+        import_action = QAction("Імпортувати розклад…", menu)
         import_action.triggered.connect(self.import_requested.emit)
         menu.addAction(import_action)
 
-        settings = QAction("Settings…", menu)
+        settings = QAction("Налаштування…", menu)
         settings.triggered.connect(self.settings_requested.emit)
         menu.addAction(settings)
 
         menu.addSeparator()
-        quit_action = QAction("Quit AutoPara", menu)
+        quit_action = QAction("Вийти з AutoPara", menu)
         quit_action.triggered.connect(self.quit_requested.emit)
         menu.addAction(quit_action)
 

@@ -3,6 +3,8 @@
 ``evaluate`` is a pure function, so the trigger boundaries are tested against a frozen clock with
 no Qt event loop and no real waiting. The browser is stubbed throughout -- these tests never open
 anything.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from autopara.core.models import (
     STATUS_MANUAL,
     STATUS_MISSED,
     STATUS_OPENED,
+    STATUS_SKIPPED,
     Lesson,
 )
 from autopara.core.scheduler import (
@@ -28,11 +31,16 @@ from autopara.core.scheduler import (
     ACTION_OPEN,
     Scheduler,
     evaluate,
+    parse_active_from,
+    predates_schedule,
+    reminder_due,
 )
 from autopara.core.storage import Storage
 
 # 2026-03-02 is a Monday.
 MONDAY = date(2026, 3, 2)
+# The timetable was imported the evening before, which is what makes that Monday's classes count.
+IMPORTED_AT = datetime(2026, 3, 1, 20, 0)
 
 
 def make_lesson(**overrides) -> Lesson:
@@ -122,6 +130,9 @@ def live(tmp_path, courses):
     group = storage.groups(course.id)[0]
     storage.set_setting("selected_course_id", course.id)
     storage.set_setting("selected_group_id", group.id)
+    # Importing stamps "the schedule starts now"; these tests simulate the Monday after, so the
+    # stamp has to sit before it or every class would predate the timetable.
+    storage.set_setting("schedule_active_from", IMPORTED_AT.isoformat())
     yield storage, group
     storage.close()
 
@@ -253,3 +264,187 @@ class TestNonHttpUrlsAreRejected:
             [group.id],
         )
         return storage.lesson(lesson_id)
+
+
+class TestAdvanceReminder:
+    """The reminder is a message, never a trigger -- see docs/BACKEND.md section 4."""
+
+    def test_fires_inside_the_notification_window(self):
+        lesson = make_lesson()
+        assert reminder_due(lesson, datetime(2026, 3, 2, 7, 49), 10, False) is False
+        assert reminder_due(lesson, datetime(2026, 3, 2, 7, 50), 10, False) is True
+        assert reminder_due(lesson, datetime(2026, 3, 2, 7, 59), 10, False) is True
+
+    def test_stops_once_the_class_has_started(self):
+        assert reminder_due(make_lesson(), datetime(2026, 3, 2, 8, 0), 10, False) is False
+
+    def test_silent_for_a_class_that_already_fired(self):
+        assert reminder_due(make_lesson(), datetime(2026, 3, 2, 7, 55), 10, True) is False
+
+    def test_disabled_by_a_zero_window(self):
+        assert reminder_due(make_lesson(), datetime(2026, 3, 2, 7, 55), 0, False) is False
+
+    def test_scheduler_emits_it_once_per_day(self, live, opened, qapp):
+        storage, group = live
+        storage.set_setting("notify_minutes", 10)
+        scheduler = Scheduler(storage)
+        seen: list[int] = []
+        scheduler.reminder_due.connect(seen.append)
+
+        scheduler.tick(datetime(2026, 3, 2, 7, 51))
+        scheduler.tick(datetime(2026, 3, 2, 7, 52))
+        assert len(seen) == 1
+        assert opened == [], "a reminder must never open anything"
+
+    def test_not_emitted_when_notifications_are_off(self, live, opened, qapp):
+        storage, group = live
+        storage.set_setting("notifications_enabled", "0")
+        scheduler = Scheduler(storage)
+        seen: list[int] = []
+        scheduler.reminder_due.connect(seen.append)
+
+        scheduler.tick(datetime(2026, 3, 2, 7, 51))
+        assert seen == []
+
+
+class TestColdStartNeverAmbushes:
+    """Bug: launching AutoPara after a missed morning opened a browser tab per missed class."""
+
+    def test_first_tick_asks_even_in_open_mode(self, live, opened, qapp):
+        storage, group = live
+        storage.set_setting("catchup_mode", CATCHUP_OPEN)
+        scheduler = Scheduler(storage)
+        offered: list[int] = []
+        scheduler.catchup_available.connect(offered.append)
+
+        # The app starts at 08:30; the 08:00 class has been running for half an hour.
+        scheduler.tick(datetime(2026, 3, 2, 8, 30))
+
+        assert opened == [], "the first tick must never open a running class by itself"
+        assert offered, "it must offer to reconnect instead"
+
+    def test_later_ticks_honour_open_mode(self, live, opened, qapp):
+        storage, group = live
+        storage.set_setting("catchup_mode", CATCHUP_OPEN)
+        scheduler = Scheduler(storage)
+
+        scheduler.tick(datetime(2026, 3, 2, 7, 0))   # cold start, nothing due
+        scheduler.tick(datetime(2026, 3, 2, 8, 30))  # now the setting applies
+        assert len(opened) == 1
+
+    def test_a_whole_missed_day_opens_nothing(self, live, opened, qapp):
+        storage, group = live
+        storage.set_setting("catchup_mode", CATCHUP_OPEN)
+        Scheduler(storage).tick(datetime(2026, 3, 2, 22, 0))
+        assert opened == []
+
+
+class TestUserMarks:
+    def _monday_lesson(self, storage, group):
+        lessons = storage.lessons_for_group(group.id)
+        return next(l for l in lessons if l.day_index == 0 and l.pair == 1 and l.url)
+
+    def test_marking_skipped_stops_the_automatic_open(self, live, opened, qapp):
+        storage, group = live
+        lesson = self._monday_lesson(storage, group)
+        scheduler = Scheduler(storage)
+
+        scheduler.mark(lesson.id, STATUS_SKIPPED, MONDAY)
+        scheduler.tick(datetime(2026, 3, 2, 7, 59))
+
+        assert opened == []
+        assert storage.occurrence(lesson.id, MONDAY).status == STATUS_SKIPPED
+
+    def test_marking_opened_by_hand_does_not_open_a_browser(self, live, opened, qapp):
+        storage, group = live
+        lesson = self._monday_lesson(storage, group)
+        Scheduler(storage).mark(lesson.id, STATUS_OPENED, MONDAY)
+        assert opened == []
+        assert storage.occurrence(lesson.id, MONDAY).status == STATUS_OPENED
+
+    def test_clearing_a_mark_lets_the_class_open_again(self, live, opened, qapp):
+        storage, group = live
+        lesson = self._monday_lesson(storage, group)
+        scheduler = Scheduler(storage)
+
+        scheduler.mark(lesson.id, STATUS_SKIPPED, MONDAY)
+        scheduler.clear_mark(lesson.id, MONDAY)
+        scheduler.tick(datetime(2026, 3, 2, 7, 0))   # burn the cold start
+        scheduler.tick(datetime(2026, 3, 2, 7, 59))
+
+        assert opened == [lesson.url]
+
+
+class TestScheduleStartsWhenImported:
+    """A timetable describes what happens from the moment it is imported, not before.
+
+    Importing at the weekend to set up the week ahead used to stamp that weekend's own classes
+    "missed" the instant the scheduler ticked.
+    """
+
+    SATURDAY = date(2026, 3, 7)
+
+    def _saturday_lesson(self, storage, group):
+        return next(
+            l for l in storage.lessons_for_group(group.id) if l.day_index == 5 and l.url
+        )
+
+    def test_predates_schedule_is_a_pure_check(self):
+        lesson = make_lesson(start_time="08:00", end_time="09:20")
+        assert predates_schedule(lesson, MONDAY, datetime(2026, 3, 2, 9, 0)) is True
+        assert predates_schedule(lesson, MONDAY, datetime(2026, 3, 2, 7, 0)) is False
+        assert predates_schedule(lesson, MONDAY, None) is False
+
+    def test_a_weekend_import_does_not_mark_that_day_missed(self, live, opened, qapp):
+        storage, group = live
+        lesson = self._saturday_lesson(storage, group)
+        # Imported on Saturday evening, after every Saturday class had already run.
+        storage.set_setting("schedule_active_from", datetime(2026, 3, 7, 20, 0).isoformat())
+
+        Scheduler(storage).tick(datetime(2026, 3, 7, 20, 1))
+
+        assert opened == []
+        assert storage.occurrence(lesson.id, self.SATURDAY) is None, (
+            "a class that ran before the timetable existed is not this app's to record"
+        )
+
+    def test_the_week_after_a_weekend_import_still_works(self, live, opened, qapp):
+        storage, group = live
+        storage.set_setting("schedule_active_from", datetime(2026, 3, 7, 20, 0).isoformat())
+        monday = next(
+            l for l in storage.lessons_for_group(group.id)
+            if l.day_index == 0 and l.url and l.start_time == "08:00"
+        )
+
+        scheduler = Scheduler(storage)
+        scheduler.tick(datetime(2026, 3, 9, 7, 0))   # burn the cold start
+        scheduler.tick(datetime(2026, 3, 9, 7, 59))  # the Monday after
+
+        assert opened == [monday.url]
+
+    def test_classes_later_the_same_day_are_untouched(self, live, opened, qapp):
+        """Only what had already started is skipped -- the rest of the day is live."""
+        storage, group = live
+        storage.set_setting("schedule_active_from", datetime(2026, 3, 2, 9, 0).isoformat())
+        scheduler = Scheduler(storage)
+
+        scheduler.tick(datetime(2026, 3, 2, 9, 1))    # cold start, nothing due
+        scheduler.tick(datetime(2026, 3, 2, 9, 29))   # lead window of the 09:30 pair
+
+        eight = next(
+            l for l in storage.lessons_for_group(group.id)
+            if l.day_index == 0 and l.start_time == "08:00"
+        )
+        assert storage.occurrence(eight.id, MONDAY) is None, "the 08:00 class predates the import"
+        assert len(opened) == 1, "the 09:30 class still opens normally"
+
+    def test_import_stamps_the_moment(self, tmp_path, courses):
+        storage = Storage(tmp_path / "stamped.db")
+        assert storage.settings().schedule_active_from == ""
+
+        before = datetime.now().replace(microsecond=0)
+        storage.import_courses(courses)
+        stamped = parse_active_from(storage.settings().schedule_active_from)
+
+        assert stamped is not None and stamped >= before
+        storage.close()

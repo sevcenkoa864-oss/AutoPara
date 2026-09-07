@@ -12,6 +12,11 @@ Google Meet link in the default browser a configurable lead time (default **1 mi
 class starts. It launches with Windows, runs quietly in the tray, and never opens the same class
 occurrence twice.
 
+**The interface is entirely Ukrainian.** The source document may be in any language the importer
+recognises (see `BACKEND.md` R10); everything the app generates from it -- day names, course
+labels, every string on screen -- is Ukrainian. An English label added to a dialog is a bug, not a
+detail.
+
 ## Tech stack and why
 
 | Concern | Choice | Rationale |
@@ -21,7 +26,9 @@ occurrence twice.
 | Storage | **SQLite** (stdlib `sqlite3`) | Zero extra dependency. Needs relational integrity for the "fire exactly once" guarantee (see below), which a flat JSON store cannot enforce. |
 | docx parsing | **stdlib `zipfile` + `xml.etree`** | A `.docx` is a zip. We must read real cell merges (`w:gridSpan`, `w:vMerge`) and hyperlink relationships, which high-level converters flatten or lose. No third-party parser needed. |
 | Autostart | **`HKCU\...\CurrentVersion\Run`** via stdlib `winreg` | User-scope (no admin), toggleable at runtime from the settings screen, and visible in Task Manager -> Startup so the user can disable it the normal way. Task Scheduler was rejected: it can require elevation and is invisible in the familiar Startup UI. |
+| Theming | **One QSS template + two palettes** (`core/theme.py`) | A single stylesheet whose colours are `$tokens`, substituted per theme. Two hand-written `.qss` files would drift: a rule added to one and forgotten in the other is invisible until someone switches theme. |
 | Packaging | **PyInstaller** (`--noconsole --onedir`) | Produces a self-contained folder + exe. |
+| Repository installer | **PyInstaller one-file `installer.exe`** carrying the source tree | Someone who downloads the repository can install with no toolchain: it validates prerequisites, installs what is missing through the terminal, and gives the app its own runtime. See "Installing from the repository". |
 
 ## Process model
 
@@ -75,15 +82,44 @@ gracefully across suspend/resume and picks up settings changes without re-arming
 
 Each tick, for every lesson scheduled today:
 
+- `now >= start - notify` -> **remind** (when notifications are on): a tray notification, never a
+  browser. The window is configurable. A reminder is a message, not a trigger, so it lives in its
+  own pure function, `reminder_due`, and cannot be confused with a decision to open something.
 - `now >= start - lead` and `now < start` -> **fire**: open the link, record `opened`.
 - `now >= start` and `now < end` -> **catch-up**: the trigger moment was missed (app was closed or
-  the machine asleep). Rather than ambushing the user with a browser window on boot, the app shows
-  a tray notification naming the class; clicking it opens the link and records `manual`. This is
-  the user-selected catch-up policy.
+  the machine asleep). The window comes forward with an in-app banner naming the class and two
+  buttons, **Підключитися зараз** and **Закрити**. Nothing opens until one of them is pressed.
 - `now >= end` -> record `missed`; the card is highlighted in the grid but nothing opens.
 
-Lessons with no link (`needs_link`) are never auto-opened; they render with a "no link" badge and
-can be given a URL through Edit mode.
+Lessons that had already started before the timetable was imported are skipped entirely — see
+`BACKEND.md`, "The schedule starts when it is imported".
+
+Lessons with no link (`needs_link`) are never auto-opened; they render with a "no link" badge, and
+clicking one offers to add a URL or delete the class.
+
+The user can also settle a class by hand from its card menu -- "opened" or "skipped". Both write an
+`occurrences` row, which is exactly what makes `evaluate` return "already fired", so a class marked
+skipped is never opened.
+
+### Catch-up never ambushes on a cold start
+
+The first tick after `Scheduler.start()` treats catch-up as "ask", **whatever `catchup_mode` says**
+(`Scheduler._cold_start`). This is not belt-and-braces. Opening the app after a morning away used
+to hand the shell one URL per class that had been running; they arrived as a burst of browser
+windows the user then had to close, leaving calls on the way out. A class whose start has already
+passed is never worth acting on without a person in the loop. `open` mode still applies from the
+second tick onward -- that is, to a class that starts while the app is running.
+
+That incident had a second cause worth keeping in mind: `webbrowser.open` on Windows can launch the
+browser through a console-subsystem child process, which flashes an empty black window per link.
+`launcher.open_url` hands the URL straight to `ShellExecuteW` and does not fall back to
+`webbrowser` on Windows at all — falling back to the thing that causes the flashing would defeat
+the point. It also drops a repeat of the same URL within three seconds, so two paths to "open"
+racing each other cannot produce two browser windows.
+
+The flashing had a third cause, on the Qt side rather than the shell side: see `FRONTEND.md`,
+"Rebuilding the grid". Detaching widgets during a rebuild made them momentary top-level windows,
+and opening a link triggers a rebuild.
 
 ## Module map
 
@@ -99,7 +135,9 @@ can be given a URL through Edit mode.
 | `autopara/core/scheduler.py` | The 15s tick loop and due/catch-up decisions. |
 | `autopara/core/launcher.py` | Opens a URL in the default browser. |
 | `autopara/core/autostart.py` | Registry `Run` key add/remove/query. |
+| `autopara/core/theme.py` | Light/dark palettes, the Windows "app theme" probe, QSS templating. |
 | `autopara/ui/*` | See `FRONTEND.md`. |
+| `installer/install_app.py` | The repository installer (tkinter, stdlib only). |
 
 ## Storage location
 
@@ -116,12 +154,26 @@ installed into `Program Files`, where a normal user cannot write.
 
 All three accept `--hidden`, which starts the app straight to the tray with no window.
 
+## Autostart is on out of the box
+
+`autostart_enabled` defaults to `1`, and `app.run()` calls `autostart.sync()` on every launch. Both
+installers write the identical `"<launcher>" --hidden` string that `autostart.startup_command()`
+produces, so the app sees an installer's entry as already enabled instead of fighting it.
+
+This matters more than it looks. The setting used to default to `0` while the NSIS installer wrote
+the Run key anyway, so `sync(False)` **deleted the installer's entry on first launch** and the app
+quietly stopped starting with Windows. The default and the installers have to agree.
+
 ## Single instance
 
 `app.py` opens a `QLocalServer` named `AutoPara.SingleInstance`. A second launch connects to it,
 asks the running instance to surface its window, and exits. Without this, autostart plus a manual
 launch would run two schedulers against the same database — the `UNIQUE` constraint would still
 prevent a double browser open, but the duplicate process would be wasted.
+
+The `QApplication` is constructed **before** the check. `QLocalSocket` needs Qt's event dispatcher
+to complete a connection; with no application object the probe quietly reports "nothing running"
+and the guard does nothing at all.
 
 ## Logging
 
@@ -143,10 +195,64 @@ Two stages, both runnable on their own:
    The bundle is self-contained: it carries `python313.dll` and the VC++ runtime, so the target PC
    needs no Python and no redistributable.
 
-2. **`makensis installer\AutoPara.nsi`** -> `dist\AutoPara-1.0.0-Setup.exe` (~35 MB, LZMA solid).
+2. **`makensis installer\AutoPara.nsi`** -> `dist\AutoPara-1.1.0-Setup.exe` (~35 MB, LZMA solid).
    Requires NSIS (`winget install NSIS.NSIS`).
 
-### Installer design
+## Reinstalling replaces; uninstalling removes everything
+
+Both installers **delete before they write**. Copying a new version over an old one leaves behind
+modules that were renamed or deleted upstream, plus the `__pycache__` that goes with them, and
+Python imports them quite happily — which is why reinstalling appeared not to apply changes at
+all. `Installation.purge_previous` removes the install directory outright, and the NSIS script
+does the same to `$INSTDIR\_internal`.
+
+The same purge clears `%APPDATA%\AutoPara`, **except `schedules/`** — the copy of the imported
+timetable, which the user should not have to hunt down again. Uninstalling makes no exception: it
+removes the install directory, the shortcuts, all three registry keys and the whole data
+directory, archived document included.
+
+## `python -m autopara` rebuilds first
+
+Checking a change used to mean running the installer again. A source run now refreshes the
+installed copy from the tree it is running out of (`core/refresh.py`) before it starts, so the code
+on screen and the code the Start-menu shortcut launches are the same code. `--no-rebuild` opts out;
+a frozen build skips it, since the frozen build *is* the installation.
+
+The refresh is a replace, per directory, for the same reason the installer's is: `runtime/` (the
+virtual environment, minutes to rebuild) and `%APPDATA%\AutoPara` are the only things it leaves
+alone. It finds the installation through `HKCU\Software\AutoPara\InstallDir`, which both
+installers write.
+
+## Installing from the repository
+
+`installer.exe` in the repository root — built by `installer\build_installer.ps1` from
+`installer/install_app.py` — is the path for someone who downloads the repository and has no
+toolchain. `installer.cmd` runs the same code under a system Python for anyone who would rather not
+run a binary.
+
+It is written against the standard library alone: tkinter for the window, `subprocess` for the
+terminal work. It has to run on a machine where nothing is installed yet, so it cannot depend on
+the packages it exists to install.
+
+Its steps:
+
+1. **Validate the prerequisites.** Find a Python >= 3.10 (`py -3`, then `python`), then check
+   `venv` and `ensurepip`. If there is no suitable Python, install one through the terminal with
+   `winget install Python.Python.3.13` and look again. Every command's output is streamed into the
+   installer's log pane, so a failure is visible rather than a silent abort.
+2. **Copy** `autopara/`, the launcher, `requirements.txt` and the docs into the chosen directory.
+3. **Build a private runtime**: a `venv` under `<install dir>\runtime` with PySide6 in it. The app
+   then does not care what the system Python holds, or what a later `pip install` does to it.
+4. **Shortcuts, autostart, Add/Remove Programs.** The Run key gets exactly the string
+   `autostart.startup_command()` produces for a source install, so the app's Settings screen sees
+   it as already enabled.
+5. **Launch AutoPara.**
+
+The two installers are not redundant. NSIS ships a frozen, Python-free bundle to someone who is
+handed a setup file; `installer.exe` installs *from source* for someone holding the repository,
+which is what keeps the repository itself directly runnable.
+
+### NSIS installer design
 
 Per-user, deliberately: it installs to `%LOCALAPPDATA%\Programs\AutoPara`, needs no administrator
 rights and raises no UAC prompt. Autostart lives in `HKCU` anyway, so a machine-wide install would
@@ -169,9 +275,9 @@ a prompt.
 python -m pytest
 ```
 
-87 tests, no waiting and no real browser: `pytest.ini` forces Qt's `offscreen` platform, the browser
-call is stubbed, and the scheduler's clock is injected so a full teaching day is simulated at
-15-second resolution in milliseconds.
+191 tests, no waiting and no real browser: `pytest.ini` forces Qt's `offscreen` platform, the
+browser call is stubbed, and the scheduler's clock is injected so a full teaching day is simulated
+at 15-second resolution in milliseconds.
 
 Qt permits one application object per process, so every Qt-dependent test shares the single
 session-scoped `qapp` fixture in `tests/conftest.py`.

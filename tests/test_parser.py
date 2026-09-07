@@ -3,6 +3,8 @@
 The expected numbers come from inspecting the real document and are recorded in
 docs/BACKEND.md section 1. If the source document is replaced these will change; update both
 places together.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations
@@ -16,8 +18,12 @@ from autopara.importer.normalize import (
     dedupe,
     detect_provider,
     find_urls,
+    is_course_heading,
     pair_from_time,
+    pair_slot,
+    pair_start_time,
     parse_time,
+    parse_time_range,
 )
 
 EXPECTED_TOTAL = 77
@@ -174,3 +180,71 @@ class TestNormalizeHelpers:
 
     def test_dedupe_preserves_order(self):
         assert dedupe(["b", "a", "b", ""]) == ["b", "a"]
+
+
+class TestAnyLanguageDocuments:
+    """R10: the importer reads any language and writes Ukrainian."""
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Понеділок", 0), ("Monday", 0), ("Mon", 0), ("Poniedziałek", 0), ("Montag", 0),
+            ("вторник", 1), ("Tuesday", 1), ("wtorek", 1),
+            ("Wednesday", 2), ("środa", 2), ("sroda", 2), ("среда", 2),
+            ("Четвер", 3), ("Thursday", 3), ("czwartek", 3),
+            ("П'ятниця", 4), ("Friday", 4), ("piątek", 4),
+            ("Субота", 5), ("Saturday", 5), ("sobota", 5),
+            ("Неділя", 6), ("Sunday", 6), ("niedziela", 6),
+        ],
+    )
+    def test_day_names_in_several_languages(self, raw, expected):
+        assert day_index(raw) == expected
+
+    def test_a_dated_day_cell_still_resolves(self):
+        assert day_index("Понеділок 02.09") == 0
+        assert day_index("Monday, 2 March") == 0
+
+    def test_unknown_text_is_not_a_day(self):
+        assert day_index("Історія України") is None
+        assert day_index("") is None
+
+    def test_course_headings_are_recognised_in_several_languages(self):
+        assert is_course_heading("І КУРС")
+        assert is_course_heading("YEAR 1")
+        assert is_course_heading("Rok II")
+        assert not is_course_heading("он-лайн")
+
+    def test_course_names_are_always_ukrainian(self, courses):
+        """Whatever the document's heading said, the stored label is Ukrainian."""
+        assert [course.name for course in courses] == [
+            "I курс", "II курс", "III курс", "IV курс", "V курс", "VI курс"
+        ]
+
+
+class TestTimeCells:
+    def test_a_range_yields_both_ends(self):
+        assert parse_time_range("8.00-9.20") == ("08:00", "09:20")
+        assert parse_time_range("8:00 – 9:20") == ("08:00", "09:20")
+
+    def test_a_bare_start_has_no_end(self):
+        assert parse_time_range("8.00") == ("08:00", None)
+
+    def test_nonsense_yields_nothing(self):
+        assert parse_time_range("немає") == (None, None)
+
+    def test_a_backwards_range_is_ignored(self):
+        assert parse_time_range("9.20-8.00") == ("09:20", None)
+
+    def test_pair_slot_places_any_time_in_the_grid(self):
+        assert pair_slot("08:00") == 1      # an exact slot
+        assert pair_slot("07:15") == 1      # before the first slot
+        assert pair_slot("12:00") == 3      # between slots -- the one already running
+        assert pair_slot("23:00") == 10     # the grid runs to the end of the evening
+
+    def test_the_grid_covers_the_whole_teaching_day(self):
+        """A class can be created at any time from 08:00 to 23:00, not only in the six slots."""
+        starts = [pair_start_time(pair) for pair in sorted(TIME_TO_PAIR.values())]
+        assert starts[0] == "08:00"
+        assert add_minutes(starts[-1], 80) >= "23:00"
+        # The university's own six slots are untouched -- the parser still depends on them.
+        assert starts[:6] == ["08:00", "09:30", "11:20", "13:00", "14:40", "16:10"]

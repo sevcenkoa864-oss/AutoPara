@@ -3,6 +3,8 @@
 Chosen over a Task Scheduler task because it needs no elevation, can be toggled from the app's own
 settings screen at any time, and shows up in Task Manager -> Startup where the user expects to find
 it. See docs/ARCHITECTURE.md.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

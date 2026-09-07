@@ -5,6 +5,8 @@ Implements the rules documented in docs/BACKEND.md section 2. The two that matte
 * **R2** a group owns a *range* of logical columns, and a lesson cell belongs to every group whose
   range it overlaps -- that is how one shared session maps to several groups.
 * **R5** a vertically merged lesson cell is a single block spanning several pairs.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations
@@ -20,10 +22,12 @@ from .normalize import (
     dedupe,
     detect_provider,
     find_urls,
+    is_course_heading,
     is_teacher_line,
     normalize_text,
     pair_from_time,
-    parse_time,
+    pair_slot,
+    parse_time_range,
 )
 
 # Columns 0..2 are День / Пара / Час; group columns start at 3.
@@ -183,9 +187,12 @@ def _parse_table(table: Table, ordinal: int, name: str, class_minutes: int) -> P
             if resolved is not None:
                 current_day = resolved
 
+        # R11: the Час cell may hold a bare start ("8.00") or a full range ("8.00-9.20").
+        # An explicit end time in the document beats the assumed class duration.
         start_time = None
+        explicit_end = None
         if time_cell is not None and not time_cell.is_empty:
-            start_time = parse_time(time_cell.lines[0])
+            start_time, explicit_end = parse_time_range(time_cell.lines[0])
         if start_time is None or current_day is None:
             continue
 
@@ -195,11 +202,11 @@ def _parse_table(table: Table, ordinal: int, name: str, class_minutes: int) -> P
             if raw.isdigit():
                 pair = int(raw)
         if pair is None:  # R6: infer the pair from the start time.
-            pair = pair_from_time(start_time)
-        if pair is None:
-            continue
+            # A foreign timetable may use slots this university does not; fall back to the grid
+            # row the time falls into rather than dropping the row (R10).
+            pair = pair_from_time(start_time) or pair_slot(start_time)
 
-        row_end = add_minutes(start_time, class_minutes)
+        row_end = explicit_end or add_minutes(start_time, class_minutes)
 
         for cell in row.cells:
             if cell.column < FIRST_GROUP_COLUMN:
@@ -245,22 +252,31 @@ def _parse_table(table: Table, ordinal: int, name: str, class_minutes: int) -> P
 def parse_document(
     document: Document, class_minutes: int = DEFAULT_CLASS_MINUTES
 ) -> list[ParsedCourse]:
-    """Pair each КУРС heading with the table that follows it, in document order (R8)."""
+    """One course per table, in document order (R8).
+
+    Courses are identified by their position in the document, never by the heading text -- the
+    heading may be in any language and mixes Cyrillic and Latin numerals even in the reference
+    file. The stored name is therefore always the Ukrainian ``course_label`` (R10); the heading is
+    only used to note that the document looks like a timetable at all.
+    """
     courses: list[ParsedCourse] = []
-    pending_heading: str | None = None
     ordinal = 0
 
     for kind, block in document.blocks:
         if kind == "p":
-            text = normalize_text(str(block))
-            if "КУРС" in text.upper():
-                pending_heading = text
-        elif kind == "tbl":
+            continue
+        if kind == "tbl":
             ordinal += 1
-            name = pending_heading or course_label(ordinal)
-            pending_heading = None
-            courses.append(_parse_table(block, ordinal, name, class_minutes))
+            courses.append(_parse_table(block, ordinal, course_label(ordinal), class_minutes))
     return courses
+
+
+def looks_like_schedule(document: Document) -> bool:
+    """True when the document carries at least one course heading in a supported language."""
+    return any(
+        kind == "p" and is_course_heading(normalize_text(str(block)))
+        for kind, block in document.blocks
+    )
 
 
 def parse_file(path: str, class_minutes: int = DEFAULT_CLASS_MINUTES) -> list[ParsedCourse]:

@@ -1,6 +1,8 @@
 """Dataclasses shared between storage, scheduler and UI.
 
 These mirror the SQLite schema documented in docs/BACKEND.md section 3.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations
@@ -18,9 +20,15 @@ PROVIDER_ZOOM = "zoom"
 PROVIDER_MEET = "google_meet"
 PROVIDER_UNKNOWN = "unknown"
 
-CATCHUP_NOTIFY = "notify"
-CATCHUP_OPEN = "open"
-CATCHUP_MISSED = "missed"
+# What to do about a class whose trigger moment was missed (docs/BACKEND.md section 4).
+CATCHUP_NOTIFY = "notify"   # show the in-app prompt and open only when the user confirms
+CATCHUP_OPEN = "open"       # open it straight away
+CATCHUP_MISSED = "missed"   # do not open; just mark it
+
+# Colour scheme. ``system`` follows Windows' own app theme, which is what a fresh install uses.
+THEME_SYSTEM = "system"
+THEME_LIGHT = "light"
+THEME_DARK = "dark"
 
 
 def parse_hhmm(value: str) -> time:
@@ -110,6 +118,11 @@ class Settings:
     selected_group_id: int | None = None
     lead_minutes: int = 1
     class_duration_minutes: int = 80
-    autostart_enabled: bool = False
+    autostart_enabled: bool = True
     catchup_mode: str = CATCHUP_NOTIFY
     last_import_path: str = ""
+    notifications_enabled: bool = True
+    notify_minutes: int = 10
+    theme: str = THEME_SYSTEM
+    schedule_active_from: str = ""  # ISO datetime; classes before it are not this app's business
+    schedule_copy_path: str = ""    # our own copy of the imported .docx (the original may go)

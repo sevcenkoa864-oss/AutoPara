@@ -1,67 +1,76 @@
-/* AutoPara — light, calendar-like styling. See docs/FRONTEND.md. */
+/* AutoPara — calendar-like styling. See docs/FRONTEND.md.
+ *
+ * This is a TEMPLATE, not a finished stylesheet: every colour is a dollar-prefixed token that
+ * core/theme.py substitutes from the light or dark palette. Never hard-code a colour here — a
+ * literal would look right in one theme and wrong in the other.
+ *
+ * Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com */
 
 QWidget {
-    background: #ffffff;
-    color: #202124;
+    background: $bg;
+    color: $text;
     font-family: "Segoe UI", "Segoe UI Variable", sans-serif;
     font-size: 10pt;
 }
 
 QMainWindow, QDialog {
-    background: #ffffff;
+    background: $bg;
 }
 
 /* ------------------------------------------------------------------ toolbar */
 
 #Toolbar {
-    background: #ffffff;
-    border-bottom: 1px solid #e8eaed;
+    background: $surface;
+    border-bottom: 1px solid $border_soft;
 }
 
 #TitleLabel {
     font-size: 15pt;
     font-weight: 600;
-    color: #202124;
+    color: $text;
 }
 
 #SubtitleLabel {
-    color: #5f6368;
+    color: $text_muted;
     font-size: 9pt;
 }
 
 QPushButton {
-    background: #ffffff;
-    border: 1px solid #dadce0;
+    background: $surface;
+    border: 1px solid $border;
     border-radius: 6px;
     padding: 6px 14px;
-    color: #3c4043;
+    color: $text;
 }
 
 QPushButton:hover {
-    background: #f8f9fa;
-    border-color: #c6cacd;
+    background: $sunken;
+    border-color: $accent;
 }
 
 QPushButton:pressed {
-    background: #f1f3f4;
+    background: $sunken;
+}
+
+QPushButton:disabled {
+    color: $text_faint;
+    border-color: $border_soft;
 }
 
 QPushButton#Primary {
-    background: #1a73e8;
-    border-color: #1a73e8;
-    color: #ffffff;
+    background: $accent;
+    border-color: $accent;
+    color: $accent_text;
     font-weight: 600;
 }
 
 QPushButton#Primary:hover {
-    background: #1b66c9;
+    background: $accent_hover;
 }
 
-QPushButton#EditToggle:checked {
-    background: #e8f0fe;
-    border-color: #1a73e8;
-    color: #1a73e8;
-    font-weight: 600;
+QPushButton#IconButton {
+    padding: 5px 10px;
+    font-size: 11pt;
 }
 
 /* --------------------------------------------------------------- week grid */
@@ -71,104 +80,118 @@ QPushButton#EditToggle:checked {
 }
 
 #DayHeader {
-    background: #ffffff;
-    border-bottom: 1px solid #e8eaed;
-    border-right: 1px solid #f1f3f4;
+    background: $surface;
+    border-bottom: 1px solid $border_soft;
+    border-right: 1px solid $grid_line;
 }
 
 #DayHeader[today="true"] {
-    background: #e8f0fe;
+    background: $accent_soft;
 }
 
 #DayName {
-    color: #5f6368;
+    color: $text_muted;
     font-size: 8.5pt;
     font-weight: 600;
 }
 
 #DayName[today="true"] {
-    color: #1a73e8;
+    color: $accent;
 }
 
 #TimeGutter {
-    background: #ffffff;
-    border-right: 1px solid #e8eaed;
+    background: $surface;
+    border-right: 1px solid $border_soft;
 }
 
-#PairNumber {
-    color: #202124;
+#HourLabel {
+    color: $text_muted;
+    font-size: 8.5pt;
     font-weight: 600;
-    font-size: 10pt;
-}
-
-#PairTime {
-    color: #80868b;
-    font-size: 8pt;
 }
 
 #GridCell {
-    background: #ffffff;
-    border-right: 1px solid #f1f3f4;
-    border-bottom: 1px solid #f1f3f4;
+    background: $surface;
+    border-right: 1px solid $grid_line;
+    border-bottom: 1px solid $grid_line;
 }
 
 #GridCell[today="true"] {
-    background: #fafbff;
+    background: $today_bg;
 }
 
 #GridCell[now="true"] {
-    background: #fff8e1;
+    background: $now_bg;
+}
+
+#GridCell:hover {
+    background: $sunken;
+}
+
+#GridCell[dropping="true"] {
+    background: $drop_bg;
+    border: 1px dashed $accent;
+}
+
+#CellHint {
+    color: $text_faint;
+    font-size: 8.5pt;
 }
 
 /* -------------------------------------------------------------- class card */
 
 #ClassCard {
-    background: #ffffff;
-    border: 1px solid #dadce0;
-    border-left: 4px solid #1a73e8;
+    background: $card_bg;
+    border: 1px solid $border;
+    border-left: 4px solid $accent;
     border-radius: 8px;
 }
 
 #ClassCard:hover {
-    border-color: #1a73e8;
+    border-color: $accent;
 }
 
 #ClassCard[state="opened"] {
-    background: #f1f3f4;
+    background: $opened_bg;
 }
 
 #ClassCard[state="missed"] {
-    border-left-color: #d93025;
-    background: #fef7f6;
+    border-left-color: $danger;
+    background: $missed_bg;
+}
+
+#ClassCard[state="skipped"] {
+    background: $skipped_bg;
+    border-style: dashed;
 }
 
 #ClassCard[state="next"] {
-    border: 2px solid #1a73e8;
-    border-left: 4px solid #1a73e8;
+    border: 2px solid $accent;
+    border-left: 4px solid $accent;
 }
 
 #ClassCard[state="nolink"] {
     border-style: dashed;
-    background: #fffdf5;
+    background: $nolink_bg;
 }
 
 #CardSubject {
     font-weight: 600;
     font-size: 9.5pt;
-    color: #202124;
+    color: $text;
 }
 
 #CardSubject[muted="true"] {
-    color: #80868b;
+    color: $text_faint;
 }
 
 #CardTeacher {
-    color: #5f6368;
+    color: $text_muted;
     font-size: 8pt;
 }
 
 #CardTime {
-    color: #5f6368;
+    color: $text_muted;
     font-size: 8pt;
 }
 
@@ -180,18 +203,18 @@ QPushButton#EditToggle:checked {
 }
 
 #CardBadge[provider="zoom"] {
-    background: #e8f0fe;
-    color: #1a56c4;
+    background: $zoom_bg;
+    color: $zoom_fg;
 }
 
 #CardBadge[provider="google_meet"] {
-    background: #e6f4ea;
-    color: #137333;
+    background: $meet_bg;
+    color: $meet_fg;
 }
 
 #CardBadge[provider="unknown"] {
-    background: #f1f3f4;
-    color: #5f6368;
+    background: $chip_bg;
+    color: $text_muted;
 }
 
 #StateBadge {
@@ -202,40 +225,65 @@ QPushButton#EditToggle:checked {
 }
 
 #StateBadge[state="opened"] {
-    background: #e6f4ea;
-    color: #137333;
+    background: $success_bg;
+    color: $success_fg;
 }
 
 #StateBadge[state="missed"] {
-    background: #fce8e6;
-    color: #c5221f;
+    background: $danger_bg;
+    color: $danger_fg;
+}
+
+#StateBadge[state="skipped"] {
+    background: $chip_bg;
+    color: $text_muted;
 }
 
 #StateBadge[state="nolink"] {
-    background: #fef7e0;
-    color: #b06000;
+    background: $warn_bg;
+    color: $warn_fg;
 }
 
 #GroupChip {
-    background: #f1f3f4;
-    color: #5f6368;
+    background: $chip_bg;
+    color: $text_muted;
     border-radius: 4px;
     padding: 1px 5px;
     font-size: 7.5pt;
 }
 
+/* --------------------------------------------------------- missed-class bar */
+
+#CatchupBanner {
+    background: $banner_bg;
+    border-bottom: 1px solid $banner_border;
+}
+
+#CatchupText {
+    color: $banner_text;
+    font-size: 9.5pt;
+    font-weight: 600;
+}
+
+#CatchupDetail {
+    color: $banner_text;
+    font-size: 8.5pt;
+}
+
 /* ------------------------------------------------------------------ dialogs */
 
 QLineEdit, QComboBox, QSpinBox, QTimeEdit {
-    border: 1px solid #dadce0;
+    border: 1px solid $border;
     border-radius: 6px;
     padding: 6px 8px;
-    background: #ffffff;
-    selection-background-color: #1a73e8;
+    background: $surface;
+    color: $text;
+    selection-background-color: $accent;
+    selection-color: $accent_text;
 }
 
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTimeEdit:focus {
-    border-color: #1a73e8;
+    border-color: $accent;
 }
 
 QComboBox::drop-down {
@@ -243,8 +291,16 @@ QComboBox::drop-down {
     width: 22px;
 }
 
+QComboBox QAbstractItemView {
+    background: $surface;
+    color: $text;
+    border: 1px solid $border;
+    selection-background-color: $accent_soft;
+    selection-color: $text;
+}
+
 QListWidget {
-    border: 1px solid #dadce0;
+    border: 1px solid $border;
     border-radius: 6px;
     padding: 4px;
 }
@@ -255,34 +311,108 @@ QListWidget::item {
 }
 
 QListWidget::item:selected {
-    background: #e8f0fe;
-    color: #1a73e8;
+    background: $accent_soft;
+    color: $accent;
 }
+
+/* Indicators must be styled for EVERY state once any rule touches the widget: as soon as a
+ * stylesheet applies to a QCheckBox or QRadioButton, Qt stops drawing the native indicator and
+ * paints only what the stylesheet asks for. Styling just `spacing` left the checked radio button
+ * with no indicator at all -- the selected option looked like plain text. */
 
 QCheckBox {
     spacing: 8px;
 }
 
+QRadioButton {
+    spacing: 8px;
+    padding: 2px 0;
+}
+
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 15px;
+    height: 15px;
+    border: 2px solid $border;
+    background: $surface;
+}
+
+QCheckBox::indicator {
+    border-radius: 4px;
+}
+
+QRadioButton::indicator {
+    /* Half of width + both borders, so the box is a circle rather than a rounded square. */
+    border-radius: 9px;
+}
+
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border-color: $accent;
+}
+
+/* The dot and the tick are drawn with gradients rather than images: the box size stays identical
+ * between states, so checking an option cannot shift the row it sits in. */
+QRadioButton::indicator:checked {
+    border-color: $accent;
+    background: qradialgradient(cx: 0.5, cy: 0.5, radius: 0.5, fx: 0.5, fy: 0.5,
+                                stop: 0 $accent, stop: 0.55 $accent,
+                                stop: 0.6 $surface, stop: 1 $surface);
+}
+
+/* A tick, not a coloured block: the box keeps its background and gets a drawn checkmark,
+ * generated per theme by core/theme.checkmark_icon (QSS cannot draw a shape itself). */
+QCheckBox::indicator:checked {
+    border-color: $accent;
+    background: $surface;
+    image: $check_icon;
+}
+
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    border-color: $border_soft;
+    background: $sunken;
+}
+
+QMenu {
+    background: $surface;
+    border: 1px solid $border;
+    padding: 4px;
+}
+
+QMenu::item {
+    padding: 6px 22px 6px 14px;
+    border-radius: 4px;
+}
+
+QMenu::item:selected {
+    background: $accent_soft;
+    color: $accent;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: $border_soft;
+    margin: 4px 8px;
+}
+
 #FormHint {
-    color: #5f6368;
+    color: $text_muted;
     font-size: 8.5pt;
 }
 
 #SectionLabel {
     font-weight: 600;
-    color: #202124;
+    color: $text;
     padding-top: 6px;
 }
 
 #EmptyState {
-    color: #80868b;
+    color: $text_faint;
     font-size: 11pt;
 }
 
 #StatusBar {
-    background: #ffffff;
-    border-top: 1px solid #e8eaed;
-    color: #5f6368;
+    background: $surface;
+    border-top: 1px solid $border_soft;
+    color: $text_muted;
     font-size: 8.5pt;
 }
 
@@ -293,13 +423,13 @@ QScrollBar:vertical {
 }
 
 QScrollBar::handle:vertical {
-    background: #dadce0;
+    background: $scroll;
     border-radius: 5px;
     min-height: 30px;
 }
 
 QScrollBar::handle:vertical:hover {
-    background: #bdc1c6;
+    background: $scroll_hover;
 }
 
 QScrollBar::add-line, QScrollBar::sub-line {
@@ -312,14 +442,14 @@ QScrollBar:horizontal {
 }
 
 QScrollBar::handle:horizontal {
-    background: #dadce0;
+    background: $scroll;
     border-radius: 5px;
     min-width: 30px;
 }
 
 QToolTip {
-    background: #3c4043;
-    color: #ffffff;
+    background: $tooltip_bg;
+    color: $tooltip_fg;
     border: none;
     padding: 5px 8px;
     border-radius: 4px;

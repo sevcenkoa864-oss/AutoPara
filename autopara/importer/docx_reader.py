@@ -7,6 +7,8 @@ This module deliberately avoids any higher-level docx library. The schedule's me
 real cell merges (``w:gridSpan``, ``w:vMerge``) and by hyperlink relationships; converters that
 flatten tables to text or HTML either duplicate merged cells or drop the link targets entirely.
 See docs/BACKEND.md rules R1, R3, R4, R5.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

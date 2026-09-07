@@ -1,4 +1,11 @@
-"""First-run / re-import flow: choose a .docx, then a course, then a group."""
+"""Перший запуск / повторний імпорт: вибір .docx, потім курсу і групи.
+
+Попередній вибір запам'ятовується: під час імпорту нового файла діалог одразу відкривається на
+тому самому курсі й тій самій групі, що були обрані раніше, тож оновлення розкладу -- це два
+кліки, а не повторне налаштування.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
+"""
 
 from __future__ import annotations
 
@@ -25,52 +32,75 @@ from ..importer.schedule_parser import ParsedCourse, parse_file
 
 
 class SetupDialog(QDialog):
-    """Imports a schedule and records the user's course and group selection."""
+    """Імпортує розклад і запам'ятовує вибір курсу та групи."""
 
     def __init__(self, storage: Storage, parent=None):
         super().__init__(parent)
         self.storage = storage
         self.parsed: list[ParsedCourse] = []
-        self.setWindowTitle("Import schedule")
-        self.setMinimumWidth(520)
+        self.setWindowTitle("Імпорт розкладу")
+        self.setMinimumWidth(540)
+
+        # Знімок попереднього вибору робиться до імпорту: сам імпорт перезаписує таблиці, але
+        # ординал курсу й назва групи -- це те, що переживає новий документ.
+        self._remembered_ordinal, self._remembered_group = self._previous_choice()
+
         self._build()
 
-        last = storage.settings().last_import_path
-        if last and Path(last).is_file():
-            self.path_edit.setText(last)
-            self._load(last)
+        # Prefer our own copy: the file the user originally picked is often a download that has
+        # since been tidied away, and the copy is byte-identical.
+        settings = storage.settings()
+        for candidate in (settings.schedule_copy_path, settings.last_import_path):
+            if candidate and Path(candidate).is_file():
+                self.path_edit.setText(candidate)
+                self._load(candidate)
+                break
+
+    def _previous_choice(self) -> tuple[int | None, str]:
+        settings = self.storage.settings()
+        if not settings.selected_group_id:
+            return None, ""
+        group = self.storage.group(settings.selected_group_id)
+        if group is None:
+            return None, ""
+        course = self.storage.course(group.course_id)
+        return (course.ordinal if course else None), group.name
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 16)
         layout.setSpacing(10)
 
-        title = QLabel("Import your schedule")
+        title = QLabel("Імпорт розкладу")
         title.setObjectName("TitleLabel")
         layout.addWidget(title)
 
-        hint = QLabel("Choose the .docx timetable, then pick your course and group.")
+        hint = QLabel(
+            "Оберіть файл .docx із розкладом, а потім свій курс і групу. "
+            "Документ може бути будь-якою мовою — записи створюються українською."
+        )
         hint.setObjectName("FormHint")
+        hint.setWordWrap(True)
         layout.addWidget(hint)
 
         file_row = QHBoxLayout()
         self.path_edit = QLineEdit()
-        self.path_edit.setPlaceholderText("Path to Робочий_розклад.docx")
+        self.path_edit.setPlaceholderText("Шлях до файла розкладу (.docx)")
         self.path_edit.setReadOnly(True)
-        browse = QPushButton("Browse…")
+        browse = QPushButton("Огляд…")
         browse.clicked.connect(self._browse)
         file_row.addWidget(self.path_edit, 1)
         file_row.addWidget(browse)
         layout.addLayout(file_row)
 
-        course_label = QLabel("Course")
+        course_label = QLabel("Курс")
         course_label.setObjectName("SectionLabel")
         layout.addWidget(course_label)
         self.course_combo = QComboBox()
         self.course_combo.currentIndexChanged.connect(self._course_changed)
         layout.addWidget(self.course_combo)
 
-        group_label = QLabel("Group")
+        group_label = QLabel("Група")
         group_label.setObjectName("SectionLabel")
         layout.addWidget(group_label)
         self.group_list = QListWidget()
@@ -84,8 +114,9 @@ class SetupDialog(QDialog):
         layout.addWidget(self.summary)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("Import")
+        self.buttons.button(QDialogButtonBox.Ok).setText("Імпортувати")
         self.buttons.button(QDialogButtonBox.Ok).setObjectName("Primary")
+        self.buttons.button(QDialogButtonBox.Cancel).setText("Скасувати")
         self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)
         layout.addWidget(self.buttons)
@@ -99,7 +130,7 @@ class SetupDialog(QDialog):
     def _browse(self) -> None:
         start_dir = str(Path.home() / "Desktop")
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select schedule", start_dir, "Word documents (*.docx)"
+            self, "Оберіть розклад", start_dir, "Документи Word (*.docx)"
         )
         if path:
             self.path_edit.setText(path)
@@ -108,10 +139,8 @@ class SetupDialog(QDialog):
     def _load(self, path: str) -> None:
         try:
             self.parsed = parse_file(path)
-        except Exception as error:  # a malformed or non-schedule .docx
-            QMessageBox.critical(
-                self, "Could not read the file", f"{path}\n\n{error}"
-            )
+        except Exception as error:  # пошкоджений або сторонній .docx
+            QMessageBox.critical(self, "Не вдалося прочитати файл", f"{path}\n\n{error}")
             self.parsed = []
             self._set_ready(False)
             return
@@ -119,13 +148,24 @@ class SetupDialog(QDialog):
         self.course_combo.clear()
         for course in self.parsed:
             count = len(course.lessons)
-            suffix = "no classes" if count == 0 else f"{count} classes"
+            suffix = "немає пар" if count == 0 else f"{count} пар"
             self.course_combo.addItem(f"{course.name}  ·  {suffix}", course.ordinal)
         if not self.parsed:
             QMessageBox.warning(
-                self, "Nothing found", "No schedule tables were found in that document."
+                self, "Нічого не знайдено", "У цьому документі немає таблиць розкладу."
             )
             self._set_ready(False)
+            return
+        self._restore_course()
+
+    def _restore_course(self) -> None:
+        """Відкрити діалог на попередньо обраному курсі, якщо він є в новому документі."""
+        if self._remembered_ordinal is None:
+            return
+        index = self.course_combo.findData(self._remembered_ordinal)
+        if index >= 0:
+            self.course_combo.setCurrentIndex(index)
+            self._course_changed(index)
 
     def _course_changed(self, index: int) -> None:
         self.group_list.clear()
@@ -134,13 +174,21 @@ class SetupDialog(QDialog):
             return
         course = self.parsed[index]
         for group in course.groups:
-            count = sum(1 for l in course.lessons if group.name in l.group_names)
-            item = QListWidgetItem(f"{group.name}   —   {group.specialty}   ({count} classes)")
+            count = sum(1 for lesson in course.lessons if group.name in lesson.group_names)
+            item = QListWidgetItem(f"{group.name}   —   {group.specialty}   ({count} пар)")
             item.setData(Qt.UserRole, group.name)
             self.group_list.addItem(item)
-        if self.group_list.count():
-            self.group_list.setCurrentRow(0)
+        self._restore_group()
         self._update_summary()
+
+    def _restore_group(self) -> None:
+        if self.group_list.count() == 0:
+            return
+        for row in range(self.group_list.count()):
+            if self.group_list.item(row).data(Qt.UserRole) == self._remembered_group:
+                self.group_list.setCurrentRow(row)
+                return
+        self.group_list.setCurrentRow(0)
 
     def _update_summary(self) -> None:
         course = self._selected_course()
@@ -150,17 +198,17 @@ class SetupDialog(QDialog):
             self._set_ready(False)
             return
 
-        mine = [l for l in course.lessons if group_name in l.group_names]
-        shared = [l for l in mine if len(l.group_names) > 1]
-        no_link = [l for l in mine if not l.url]
-        parts = [f"<b>{len(mine)}</b> classes"]
+        mine = [lesson for lesson in course.lessons if group_name in lesson.group_names]
+        shared = [lesson for lesson in mine if len(lesson.group_names) > 1]
+        no_link = [lesson for lesson in mine if not lesson.url]
+        parts = [f"<b>{len(mine)}</b> пар"]
         if shared:
-            parts.append(f"{len(shared)} shared with another group")
+            parts.append(f"{len(shared)} спільних з іншою групою")
         if no_link:
-            parts.append(f"{len(no_link)} without a link")
+            parts.append(f"{len(no_link)} без посилання")
         text = " · ".join(parts)
         if not mine:
-            text = "This group has no classes in the document."
+            text = "У цієї групи немає пар у документі."
         self.summary.setText(text)
         self._set_ready(True)
 
@@ -187,13 +235,13 @@ class SetupDialog(QDialog):
             (c for c in self.storage.courses() if c.ordinal == course.ordinal), None
         )
         if stored_course is None:
-            QMessageBox.critical(self, "Import failed", "The course could not be saved.")
+            QMessageBox.critical(self, "Імпорт не вдався", "Не вдалося зберегти курс.")
             return
         stored_group = next(
             (g for g in self.storage.groups(stored_course.id) if g.name == group_name), None
         )
         if stored_group is None:
-            QMessageBox.critical(self, "Import failed", "The group could not be saved.")
+            QMessageBox.critical(self, "Імпорт не вдався", "Не вдалося зберегти групу.")
             return
 
         self.storage.set_setting("selected_course_id", stored_course.id)

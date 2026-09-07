@@ -1,3 +1,4 @@
+# Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 # PyInstaller spec for AutoPara.
 #
 # Built as --onedir --noconsole:

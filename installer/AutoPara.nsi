@@ -1,3 +1,4 @@
+; Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 ; NSIS installer for AutoPara.
 ;
 ; Per-user install by default: it goes to %LOCALAPPDATA%\Programs\AutoPara, needs no administrator
@@ -15,7 +16,7 @@ Unicode true
 
 !define APP_NAME     "AutoPara"
 !define APP_DISPLAY  "AutoPara - Class Auto-Launcher"
-!define APP_VERSION  "1.0.0"
+!define APP_VERSION  "1.2.0"
 !define APP_PUBLISHER "AutoPara"
 !define APP_EXE      "AutoPara.exe"
 !define UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
@@ -61,9 +62,11 @@ Section "AutoPara (required)" SEC_CORE
   SectionIn RO
   SetOutPath "$INSTDIR"
 
-  ; Remove a previous _internal tree first: PyInstaller bundles change between builds and a
-  ; leftover stale DLL would be picked up ahead of the new one.
+  ; Replace, never merge. A leftover module or DLL from an earlier build is loadable and wins
+  ; over nothing, which is how a reinstall used to keep the old behaviour. Everything the
+  ; installer owns goes first; %APPDATA%\AutoPara\schedules (the imported .docx) is untouched.
   RMDir /r "$INSTDIR\_internal"
+  Delete "$INSTDIR\${APP_EXE}"
 
   File /r "..\dist\AutoPara\*.*"
 
@@ -94,6 +97,9 @@ Section "Desktop shortcut" SEC_DESKTOP
 SectionEnd
 
 Section "Start automatically with Windows" SEC_AUTOSTART
+  ; Selected by default: the app also defaults autostart_enabled to 1, and the two must agree --
+  ; a mismatch made autostart.sync() delete this entry on the first launch.
+  ;
   ; Must match autostart.startup_command() in the frozen app exactly, so the app's own Settings
   ; screen sees this entry as already-enabled and can toggle it off later.
   WriteRegStr HKCU "${RUN_KEY}" "${APP_NAME}" '"$INSTDIR\${APP_EXE}" --hidden'
@@ -101,8 +107,9 @@ SectionEnd
 
 LangString DESC_CORE      ${LANG_ENGLISH} "The AutoPara application and its runtime."
 LangString DESC_DESKTOP   ${LANG_ENGLISH} "Put a shortcut on the desktop."
-LangString DESC_AUTOSTART ${LANG_ENGLISH} "Launch AutoPara hidden in the system tray when Windows \
-starts, so classes open even if you forget to start it. You can change this later in Settings."
+LangString DESC_AUTOSTART ${LANG_ENGLISH} "On by default. Launch AutoPara hidden in the system \
+tray when Windows starts, so classes open even if you forget to start it. You can change this \
+later in Settings."
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC_CORE}      $(DESC_CORE)
@@ -142,13 +149,7 @@ Section "Uninstall"
   DeleteRegKey   HKCU "${UNINST_KEY}"
   DeleteRegKey   HKCU "Software\${APP_NAME}"
 
-  ; The schedule database and log live in %APPDATA%\AutoPara. Keep them unless the user says
-  ; otherwise, so reinstalling does not lose an imported timetable. A silent uninstall must not
-  ; block on a prompt, so it always keeps the data.
-  IfSilent keep_data
-  MessageBox MB_YESNO|MB_ICONQUESTION \
-    "Also delete your imported schedule and settings?$\r$\n$\r$\n$APPDATA\${APP_NAME}" \
-    IDNO keep_data
+  ; Uninstalling removes everything the app ever wrote, the imported timetable included.
+  ; (Reinstalling is the case that keeps the .docx -- see the install section.)
   RMDir /r "$APPDATA\${APP_NAME}"
-  keep_data:
 SectionEnd

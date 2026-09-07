@@ -1,62 +1,92 @@
-# AutoPara — Class Auto-Launcher
+# AutoPara — автозапуск пар
 
-A Windows tray app that imports a university timetable from a `.docx`, shows the week as a
-calendar grid, and opens each class's Zoom / Google Meet link in the default browser one minute
-before it starts.
+A Windows tray app that imports a university timetable from a `.docx`, shows the week as a calendar
+grid, and opens each class's Zoom / Google Meet link in the default browser a minute before it
+starts. **The application's interface is Ukrainian**; this README and the design docs are English,
+for whoever maintains it.
 
 ![week grid](docs/week-grid.png)
 
-## Install and run
+## Install
+
+Download the repository and run **`installer.exe`** from its root.
+
+It asks where to install, checks that everything needed is present — a suitable Python, `venv`,
+`pip` — installs through the terminal whatever is missing (including Python itself, via `winget`),
+gives the app its own runtime with PySide6 in it, creates shortcuts, turns on start-with-Windows,
+and launches AutoPara when it is done. No admin rights, no UAC prompt; it installs to
+`%LOCALAPPDATA%\Programs\AutoPara`.
+
+Prefer not to run a binary? `installer.cmd` runs the exact same installer with your own Python.
+
+To rebuild `installer.exe` after changing anything:
+
+```
+python -m pip install pyinstaller
+.\installer\build_installer.ps1
+```
+
+## Run from source
 
 ```
 python -m pip install -r requirements.txt
 python -m autopara
 ```
 
-On first launch it asks for the `.docx`, then your course and group, then offers to start with
-Windows.
+On first launch it asks for the `.docx`, then your course and group.
 
-## Build an installer
+`python -m autopara` also **refreshes the installed copy** from the source it is running out of, so
+checking a change is one command rather than a reinstall. Add `--no-rebuild` to skip that.
+
+## Build the standalone (Python-free) bundle
 
 ```
 .\build.ps1
 ```
 
-Produces:
-
 | File | Size | What it is |
 |---|---|---|
-| `dist\AutoPara-1.0.0-Setup.exe` | ~35 MB | **The installer** - copy this to another PC. |
+| `dist\AutoPara-1.1.0-Setup.exe` | ~35 MB | NSIS installer — hand this to someone who does not have the repository. |
 | `dist\AutoPara\AutoPara.exe` | ~118 MB folder | The unpacked app, if you'd rather not install. |
 
-The installer is per-user: it installs to `%LOCALAPPDATA%\Programs\AutoPara`, needs **no admin
-rights and shows no UAC prompt**, and adds Start Menu / desktop shortcuts, an Add/Remove Programs
-entry, and an optional "start with Windows" component.
-
-The target PC needs **nothing preinstalled** - no Python, no Qt, no VC++ redistributable; they are
-all inside the bundle. Windows 10/11 64-bit.
-
-Silent install and uninstall are supported (`/S`), and uninstalling keeps your imported timetable in
-`%APPDATA%\AutoPara` unless you choose to delete it.
-
-Building the installer yourself needs NSIS: `winget install NSIS.NSIS`.
+That bundle needs **nothing preinstalled** — no Python, no Qt, no VC++ redistributable. Windows
+10/11 64-bit. Silent install and uninstall are supported (`/S`), and uninstalling keeps your
+imported timetable in `%APPDATA%\AutoPara` unless you choose to delete it. Building it needs NSIS:
+`winget install NSIS.NSIS`.
 
 ## How it behaves
 
-- **Opens each class once.** The lead time defaults to 1 minute and is configurable in Settings.
-  Restarting the app, waking from sleep, or changing the clock cannot cause a second open — the
-  guarantee is a database constraint, not in-memory state.
-- **Catch-up.** If the PC was asleep and the moment was missed while the class is still running,
-  a tray notification offers to open it. It never opens a browser window unprompted. Two other
-  policies (open immediately / mark missed) are available in Settings.
-- **Shared classes.** When one session is taught to several groups at once, it appears as a single
-  card tagged with the groups, and its link opens once.
-- **Classes with no link** are shown with a dashed border and never auto-open; click one to add a
-  URL.
-- **Editing.** The Edit toggle unlocks add / edit / delete. Manually added classes survive
-  re-importing the document.
+- **Opens each class once.** The lead time defaults to 1 minute and is configurable. Restarting the
+  app, waking from sleep, or changing the clock cannot cause a second open — the guarantee is a
+  database constraint, not in-memory state.
+- **A missed class is never opened behind your back.** If a class was already running when AutoPara
+  started, the window comes forward with a banner naming it and two buttons — *Підключитися зараз*
+  and *Закрити*. Nothing opens until you pick one. This holds even when the catch-up setting says
+  "open immediately": that setting applies to a class that starts while the app is running.
+- **Reminders.** An optional tray notification a configurable number of minutes before each class.
+- **Any-language documents.** Day names are recognised in Ukrainian, Russian, English, Polish,
+  German and several other languages; the schedule the app builds from them is always Ukrainian.
+- **Editable straight away** — no edit mode. Click a class for its actions (open, edit, mark as
+  opened or skipped, delete), click an empty slot to create one there, drag a class to move it.
+  A class with no link offers to add one instead of opening.
+- **A real calendar day**, 08:00 to 23:00 in hourly rows, with each class drawn across the time it
+  actually occupies rather than dropped into a slot. Columns are weekdays; the timetable repeats
+  every week, so there are no dates and nothing to navigate.
+- **Light and dark themes**, following the Windows app theme until you pin one.
+- **Shared classes.** One session taught to several groups is a single card tagged with the groups,
+  and its link opens once.
+- **Re-importing** a new document keeps the course and group you had selected and your manually
+  added classes, and clears the old week's records — a new timetable starts on a clean grid. It
+  also only applies from the moment you import it, so setting one up at the weekend does not mark
+  that weekend as missed.
+- **Your timetable is copied into the app**, so deleting the original `.docx` costs you nothing.
+  Reinstalling keeps that copy; uninstalling removes it along with everything else.
 
 Closing the window hides it to the tray; use the tray menu to quit.
+
+## Author
+
+Authorised by MaBoRo (Vladyslav Tishyn) — vlad.tishyn@gmail.com
 
 ## Documentation
 
@@ -73,4 +103,5 @@ python -m pytest
 ```
 
 Parser tests run against the real schedule document, which is not committed. Put it on the Desktop
-or set `AUTOPARA_TEST_DOCX` to its path; the tests skip if it cannot be found.
+or set `AUTOPARA_TEST_DOCX` to its path; the tests skip if it cannot be found — so check the count,
+not just the colour.

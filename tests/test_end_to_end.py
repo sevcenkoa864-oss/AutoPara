@@ -2,6 +2,8 @@
 
 Drives ``Scheduler.tick`` with an injected clock, so a full teaching day is simulated in
 milliseconds. The browser is stubbed -- nothing is ever actually opened.
+
+Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from autopara.core.scheduler import Scheduler
 from autopara.core.storage import Storage
 
 MONDAY = date(2026, 3, 2)
+IMPORTED_AT = datetime(2026, 3, 1, 20, 0)  # the Sunday evening before
 
 
 @pytest.fixture
@@ -34,6 +37,7 @@ def app(tmp_path, courses):
     group = storage.groups(course.id)[0]
     storage.set_setting("selected_course_id", course.id)
     storage.set_setting("selected_group_id", group.id)
+    storage.set_setting("schedule_active_from", IMPORTED_AT.isoformat())
     yield storage, group
     storage.close()
 
@@ -99,6 +103,7 @@ class TestRestartAndSleep:
         course = first.courses()[0]
         group = first.groups(course.id)[0]
         first.set_setting("selected_group_id", group.id)
+        first.set_setting("schedule_active_from", IMPORTED_AT.isoformat())
         Scheduler(first).tick(datetime(2026, 3, 2, 7, 59, 0))
         assert len(opened) == 1
         first.close()
@@ -195,3 +200,84 @@ class TestEditsAffectTheScheduler:
 
         run_day(Scheduler(storage), datetime(2026, 3, 2, 7, 0), datetime(2026, 3, 2, 9, 0))
         assert first.url not in opened
+
+
+class TestLaunchingIntoAMissedDay:
+    """Regression for the reported bug: opening the app after missing classes opened every link."""
+
+    def _monday_lessons(self, storage, group):
+        return [l for l in storage.lessons_for_group(group.id) if l.day_index == 0 and l.url]
+
+    def test_launching_mid_day_opens_nothing(self, app, opened, qapp):
+        storage, group = app
+        assert len(self._monday_lessons(storage, group)) > 1, "need several Monday classes"
+
+        # AutoPara starts at 15:00: the morning classes are over, one is still running.
+        scheduler = Scheduler(storage)
+        offered: list[int] = []
+        scheduler.catchup_available.connect(offered.append)
+        scheduler.tick(datetime(2026, 3, 2, 15, 0))
+
+        assert opened == [], "no browser tab may be opened by the launch itself"
+        assert len(offered) <= 1, "at most the class actually running is offered"
+
+    def test_launching_mid_day_opens_nothing_even_in_open_mode(self, app, opened, qapp):
+        storage, group = app
+        storage.set_setting("catchup_mode", "open")
+
+        Scheduler(storage).tick(datetime(2026, 3, 2, 15, 0))
+        assert opened == []
+
+    def test_the_offer_opens_exactly_one_link_when_accepted(self, app, opened, qapp):
+        storage, group = app
+        scheduler = Scheduler(storage)
+        offered: list[int] = []
+        scheduler.catchup_available.connect(offered.append)
+        scheduler.tick(datetime(2026, 3, 2, 8, 30))
+        assert offered, "the running class must be offered"
+
+        scheduler.open_now(offered[0], MONDAY)
+        assert len(opened) == 1
+        assert storage.occurrence(offered[0], MONDAY).status == STATUS_MANUAL
+
+    def test_dismissing_the_offer_leaves_it_closed(self, app, opened, qapp):
+        """"Закрити" marks the class missed, so a later tick does not offer it again."""
+        from autopara.core.models import STATUS_MISSED
+
+        storage, group = app
+        scheduler = Scheduler(storage)
+        offered: list[int] = []
+        scheduler.catchup_available.connect(offered.append)
+        scheduler.tick(datetime(2026, 3, 2, 8, 30))
+
+        scheduler.mark(offered[0], STATUS_MISSED, MONDAY)
+        run_day(scheduler, datetime(2026, 3, 2, 8, 31), datetime(2026, 3, 2, 9, 15))
+
+        assert opened == []
+        assert len(offered) == 1
+        assert storage.occurrence(offered[0], MONDAY).status == STATUS_MISSED
+
+
+class TestImportRemembersTheSelection:
+    """Re-importing a fresh document must not make the user pick course and group again."""
+
+    def test_setup_dialog_preselects_the_previous_course_and_group(
+        self, app, schedule_path, gui_app
+    ):
+        from autopara.ui.setup_dialog import SetupDialog
+
+        storage, group = app
+        course = storage.course(group.course_id)
+
+        # Pick the second group of the second course, then re-open the import dialog.
+        other_course = storage.courses()[1]
+        other_group = storage.groups(other_course.id)[0]
+        storage.set_setting("selected_course_id", other_course.id)
+        storage.set_setting("selected_group_id", other_group.id)
+
+        dialog = SetupDialog(storage)
+        dialog._load(schedule_path)
+
+        assert dialog.course_combo.currentData() == other_course.ordinal
+        assert dialog._selected_group_name() == other_group.name
+        assert course is not None  # the first selection existed and was replaced

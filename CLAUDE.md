@@ -9,10 +9,14 @@ must be **read before starting any coding task** and **updated in the same commi
 architecture, data model, UI structure or behavior. Stale docs are treated as a bug in this project.
 Keep them concise and current rather than appending changelogs.
 
+All source files carry the author line `Authorised by MaBoRo (Vladyslav Tishyn),
+vlad.tishyn@gmail.com` in their module docstring or leading comment; see `AUTHORS`. Keep it on new
+files.
+
 ## Commands
 
 ```bash
-python -m pytest                       # all 87 tests (~11 s)
+python -m pytest                       # all 191 tests (~17 s)
 python -m pytest tests/test_parser.py  # one file
 python -m pytest -k shared             # by keyword
 python -m pytest "tests/test_parser.py::TestMergeHandling::test_shared_class_is_one_lesson_with_many_groups"
@@ -22,6 +26,8 @@ python -m autopara --hidden            # start to tray with no window (the autos
 
 .\build.ps1                            # PyInstaller bundle + NSIS installer -> dist\
 .\build.ps1 -SkipApp                   # installer only, reusing dist\AutoPara\
+
+.\installer\build_installer.ps1        # the repo's own installer.exe (needs pyinstaller)
 ```
 
 No linter or formatter is configured; match the surrounding style.
@@ -54,6 +60,16 @@ without exiting. Chosen because Node.js is not installed on the target machine.
 **The database is the single source of truth.** The UI caches no lesson state; every mutation is
 followed by a reload from storage.
 
+### Invariant: the interface is Ukrainian
+
+Every user-visible string in `autopara/ui/` and `installer/install_app.py` is Ukrainian. There is
+no translation layer and no second locale — one locale needs no machinery.
+`tests/test_ui.py::test_interface_is_ukrainian` walks the live widget tree and fails on Latin words
+other than `AutoPara`, `Zoom`, `Meet`, `docx`. Docstrings, comments and the design docs stay English.
+
+The importer reads documents in other languages and converts what it finds (days, course labels)
+into Ukrainian. Subject and teacher text is copied verbatim — it is data, not chrome.
+
 ### Invariant: open each class exactly once
 
 Enforced by the database, not by in-memory bookkeeping. `occurrences` has
@@ -64,7 +80,47 @@ on the same day cannot double-open it. Preserve claim-before-open in any change 
 
 `Scheduler.evaluate()` is a pure function of `(lesson, now, lead, already_fired)` so trigger
 boundaries are testable without a clock or event loop. Keep it pure; `tick(now)` must derive
-everything from the injected time, including the weekday.
+everything from the injected time, including the weekday. `reminder_due()` is a *second* pure
+function and must stay separate: a reminder is a message, and folding it into `evaluate` puts it
+one keystroke away from opening a browser.
+
+### Invariant: a class that is already running is never opened unasked
+
+`Scheduler._cold_start` makes the first tick after `start()` treat catch-up as "ask", **whatever
+`catchup_mode` says**. This fixes a real, reported bug — launching the app after a missed morning
+opened a browser tab per still-running class — and it is not redundant with the notify default.
+`open` mode applies from the second tick onward. `TestColdStartNeverAmbushes` and
+`TestLaunchingIntoAMissedDay` exist to stop this being "simplified" back.
+
+The same incident's other half: `launcher.open_url` calls `ShellExecuteW` and never falls back to
+`webbrowser` on Windows, which can launch the browser through a console-subsystem child and flash
+an empty black window per link.
+
+### Invariant: the grid rebuild never detaches a widget
+
+`WeekGrid._clear()` hides and deletes; `setParent(None)` on a live widget makes it a **top-level
+window** until `deleteLater` runs, and rebuilding a week that way flashed dozens of empty windows
+on screen. Opening a link triggers a rebuild, which is why this looked like a browser bug.
+
+### Invariant: installing and refreshing replace, never merge
+
+`Installation.purge_previous`, the NSIS install section and `core.refresh.refresh_installation` all
+delete a directory before writing it. A module dropped upstream stays importable otherwise, which
+is exactly why "reinstall and check" did not show new behaviour. `%APPDATA%\AutoPara\schedules`
+(the imported `.docx`) is the one thing a reinstall spares; an uninstall spares nothing.
+
+`python -m autopara` runs the refresh before starting, so a source run leaves the installed copy
+up to date. `--no-rebuild` skips it.
+
+### Invariant: a timetable only applies from the moment it is imported
+
+`import_courses` stamps `schedule_active_from`; `Scheduler.predates_schedule` skips anything that
+had already started by then — not opened, not offered, not marked missed. Importing at the weekend
+to set up the coming week must not paint that weekend red.
+
+`storage.mark_occurrence` is the one sanctioned way to write an occurrence row without claiming it
+first: it records a decision the user made in the UI, and the row it writes is what stops the
+scheduler acting on that class.
 
 Polling every 15 s (rather than one-shot timers) is deliberate: it survives suspend/resume and
 settings changes with no re-arming logic.
@@ -93,16 +149,24 @@ schedules must stay a valid state throughout the stack.
 
 ### Windows integration
 
-- **Autostart** is `HKCU\...\CurrentVersion\Run`, value `AutoPara`, via stdlib `winreg`. The NSIS
-  installer writes the *same* value in the *same* format `"<exe>" --hidden` that
-  `autostart.startup_command()` produces for a frozen build. If those ever diverge, `autostart.sync()`
-  silently rewrites the entry on next launch — keep them identical.
+- **Autostart** is `HKCU\...\CurrentVersion\Run`, value `AutoPara`, via stdlib `winreg`. Both
+  installers write the *same* value in the *same* format `"<launcher>" --hidden` that
+  `autostart.startup_command()` produces. If those ever diverge, `autostart.sync()` silently
+  rewrites the entry on next launch — keep them identical.
+- **`autostart_enabled` defaults to `1`.** It used to default to `0` while the installer wrote the
+  Run key anyway, so `sync(False)` deleted the installer's entry on first launch. The default and
+  the installers have to agree.
 - `startup_command()` differs frozen vs. from source (source uses `pythonw.exe` plus the absolute
   path to `autopara_launch.pyw`, because the Run key executes with an arbitrary working directory).
 - **Only http/https URLs are ever opened** (`launcher.is_openable`). Link text comes from a document,
   so `file:` and `javascript:` values must never reach the shell.
 - Closing the window hides to tray; only the tray's Quit exits. A `QLocalServer` single-instance
   guard makes a second launch surface the existing window.
-- The installer is per-user (`%LOCALAPPDATA%\Programs\AutoPara`, no admin/UAC). Both of its prompts
-  are guarded with `IfSilent`, or `/S` install and uninstall hang on an invisible message box.
-  Uninstall keeps `%APPDATA%\AutoPara` so a reinstall does not lose the imported timetable.
+- The NSIS installer is per-user (`%LOCALAPPDATA%\Programs\AutoPara`, no admin/UAC). Both of its
+  prompts are guarded with `IfSilent`, or `/S` install and uninstall hang on an invisible message
+  box. Uninstall keeps `%APPDATA%\AutoPara` so a reinstall does not lose the imported timetable.
+- **Two installers, not one duplicated.** `installer.exe` (repo root, from
+  `installer/install_app.py`) installs *from source* for someone who downloaded the repository: it
+  validates prerequisites, installs missing ones through the terminal, and builds a private venv.
+  It is stdlib-only — tkinter and `subprocess` — because it has to run before PySide6 exists. The
+  NSIS installer ships the frozen, Python-free bundle to someone handed a setup file.
