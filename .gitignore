@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+build/
+dist/
+*.spec.bak
+.venv/
+.pytest_cache/
+
+# Never commit the personal timetable: it contains live meeting links.
+*.docx

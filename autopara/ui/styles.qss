@@ -1,0 +1,326 @@
+/* AutoPara — light, calendar-like styling. See docs/FRONTEND.md. */
+
+QWidget {
+    background: #ffffff;
+    color: #202124;
+    font-family: "Segoe UI", "Segoe UI Variable", sans-serif;
+    font-size: 10pt;
+}
+
+QMainWindow, QDialog {
+    background: #ffffff;
+}
+
+/* ------------------------------------------------------------------ toolbar */
+
+#Toolbar {
+    background: #ffffff;
+    border-bottom: 1px solid #e8eaed;
+}
+
+#TitleLabel {
+    font-size: 15pt;
+    font-weight: 600;
+    color: #202124;
+}
+
+#SubtitleLabel {
+    color: #5f6368;
+    font-size: 9pt;
+}
+
+QPushButton {
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    padding: 6px 14px;
+    color: #3c4043;
+}
+
+QPushButton:hover {
+    background: #f8f9fa;
+    border-color: #c6cacd;
+}
+
+QPushButton:pressed {
+    background: #f1f3f4;
+}
+
+QPushButton#Primary {
+    background: #1a73e8;
+    border-color: #1a73e8;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+QPushButton#Primary:hover {
+    background: #1b66c9;
+}
+
+QPushButton#EditToggle:checked {
+    background: #e8f0fe;
+    border-color: #1a73e8;
+    color: #1a73e8;
+    font-weight: 600;
+}
+
+/* --------------------------------------------------------------- week grid */
+
+#GridScroll {
+    border: none;
+}
+
+#DayHeader {
+    background: #ffffff;
+    border-bottom: 1px solid #e8eaed;
+    border-right: 1px solid #f1f3f4;
+}
+
+#DayHeader[today="true"] {
+    background: #e8f0fe;
+}
+
+#DayName {
+    color: #5f6368;
+    font-size: 8.5pt;
+    font-weight: 600;
+}
+
+#DayName[today="true"] {
+    color: #1a73e8;
+}
+
+#TimeGutter {
+    background: #ffffff;
+    border-right: 1px solid #e8eaed;
+}
+
+#PairNumber {
+    color: #202124;
+    font-weight: 600;
+    font-size: 10pt;
+}
+
+#PairTime {
+    color: #80868b;
+    font-size: 8pt;
+}
+
+#GridCell {
+    background: #ffffff;
+    border-right: 1px solid #f1f3f4;
+    border-bottom: 1px solid #f1f3f4;
+}
+
+#GridCell[today="true"] {
+    background: #fafbff;
+}
+
+#GridCell[now="true"] {
+    background: #fff8e1;
+}
+
+/* -------------------------------------------------------------- class card */
+
+#ClassCard {
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    border-left: 4px solid #1a73e8;
+    border-radius: 8px;
+}
+
+#ClassCard:hover {
+    border-color: #1a73e8;
+}
+
+#ClassCard[state="opened"] {
+    background: #f1f3f4;
+}
+
+#ClassCard[state="missed"] {
+    border-left-color: #d93025;
+    background: #fef7f6;
+}
+
+#ClassCard[state="next"] {
+    border: 2px solid #1a73e8;
+    border-left: 4px solid #1a73e8;
+}
+
+#ClassCard[state="nolink"] {
+    border-style: dashed;
+    background: #fffdf5;
+}
+
+#CardSubject {
+    font-weight: 600;
+    font-size: 9.5pt;
+    color: #202124;
+}
+
+#CardSubject[muted="true"] {
+    color: #80868b;
+}
+
+#CardTeacher {
+    color: #5f6368;
+    font-size: 8pt;
+}
+
+#CardTime {
+    color: #5f6368;
+    font-size: 8pt;
+}
+
+#CardBadge {
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 7.5pt;
+    font-weight: 600;
+}
+
+#CardBadge[provider="zoom"] {
+    background: #e8f0fe;
+    color: #1a56c4;
+}
+
+#CardBadge[provider="google_meet"] {
+    background: #e6f4ea;
+    color: #137333;
+}
+
+#CardBadge[provider="unknown"] {
+    background: #f1f3f4;
+    color: #5f6368;
+}
+
+#StateBadge {
+    font-size: 7.5pt;
+    font-weight: 600;
+    border-radius: 4px;
+    padding: 1px 6px;
+}
+
+#StateBadge[state="opened"] {
+    background: #e6f4ea;
+    color: #137333;
+}
+
+#StateBadge[state="missed"] {
+    background: #fce8e6;
+    color: #c5221f;
+}
+
+#StateBadge[state="nolink"] {
+    background: #fef7e0;
+    color: #b06000;
+}
+
+#GroupChip {
+    background: #f1f3f4;
+    color: #5f6368;
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 7.5pt;
+}
+
+/* ------------------------------------------------------------------ dialogs */
+
+QLineEdit, QComboBox, QSpinBox, QTimeEdit {
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    padding: 6px 8px;
+    background: #ffffff;
+    selection-background-color: #1a73e8;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTimeEdit:focus {
+    border-color: #1a73e8;
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QListWidget {
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    padding: 4px;
+}
+
+QListWidget::item {
+    padding: 7px 8px;
+    border-radius: 4px;
+}
+
+QListWidget::item:selected {
+    background: #e8f0fe;
+    color: #1a73e8;
+}
+
+QCheckBox {
+    spacing: 8px;
+}
+
+#FormHint {
+    color: #5f6368;
+    font-size: 8.5pt;
+}
+
+#SectionLabel {
+    font-weight: 600;
+    color: #202124;
+    padding-top: 6px;
+}
+
+#EmptyState {
+    color: #80868b;
+    font-size: 11pt;
+}
+
+#StatusBar {
+    background: #ffffff;
+    border-top: 1px solid #e8eaed;
+    color: #5f6368;
+    font-size: 8.5pt;
+}
+
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #dadce0;
+    border-radius: 5px;
+    min-height: 30px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #bdc1c6;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line {
+    height: 0;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #dadce0;
+    border-radius: 5px;
+    min-width: 30px;
+}
+
+QToolTip {
+    background: #3c4043;
+    color: #ffffff;
+    border: none;
+    padding: 5px 8px;
+    border-radius: 4px;
+}
