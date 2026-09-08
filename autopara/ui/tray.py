@@ -5,6 +5,7 @@ Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
@@ -21,14 +22,16 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 
-# systemBlue, fixed rather than themed: this mark is drawn on the taskbar and on the first screen,
-# neither of which follows AutoPara's own light/dark setting.
-ICON_BLUE_TOP = "#3d9bff"
-ICON_BLUE_BOTTOM = "#0062cc"
-ICON_INK = "#ffffff"
+# Fixed rather than themed: this mark is drawn on the taskbar, on the desktop and at the top of
+# the rail, and none of those follows AutoPara's own light/dark setting.
+ICON_NIGHT = "#12142c"        # the top of the plate, almost black
+ICON_DUSK = "#2f3576"         # the turn, held low so most of the plate stays dark
+ICON_ACCENT = "#6067e5"       # the bottom edge: the interface accent, so the two agree
+ICON_INK = "#ccd4e4"          # the book
+ICON_INK_BRIGHT = "#e2e8f4"   # the clock, a shade brighter so it reads as the nearer object
 
-# The mark is described on a 64x64 grid and scaled, so one drawing serves the 16 px tray slot and
-# the 30 px badge at the top of the rail.
+# The mark is described on a 64x64 grid and scaled, so one drawing serves the 16 px tray slot, the
+# 30 px badge on the rail and the 256 px entry in the .ico.
 ICON_GRID = 64.0
 
 # What goes into the .ico Windows reads for the executable, the desktop shortcut and the taskbar.
@@ -42,14 +45,106 @@ def build_icon() -> QIcon:
     return QIcon(icon_pixmap(64))
 
 
+def _plate_gradient() -> QLinearGradient:
+    """The plate's fill, also used to paint the pages so that they hide what is behind them.
+
+    Filling a page with this exact gradient is invisible against the plate -- same brush, same
+    coordinates -- which is what lets the book occlude the clock without a seam where it does.
+    """
+    body = QLinearGradient(QPointF(32, 3), QPointF(32, 61))
+    body.setColorAt(0.0, QColor(ICON_NIGHT))
+    body.setColorAt(0.55, QColor(ICON_DUSK))
+    body.setColorAt(1.0, QColor(ICON_ACCENT))
+    return body
+
+
+def _plate(painter: QPainter) -> None:
+    """The squircle everything else sits on, lit from below rather than above.
+
+    Most of it is nearly black and the colour arrives at the bottom edge, which is what keeps a
+    light book and a light clock legible on it at every size.
+    """
+    painter.setPen(Qt.NoPen)
+    painter.setBrush(_plate_gradient())
+    painter.drawRoundedRect(QRectF(3, 3, 58, 58), 15, 15)
+
+
+def _clock(painter: QPainter) -> None:
+    """A ring, twelve ticks and two hands, sitting in the open book below it."""
+    centre = QPointF(32, 21.5)
+    pen = QPen(QColor(ICON_INK_BRIGHT))
+    pen.setWidthF(2.0)
+    pen.setCapStyle(Qt.RoundCap)
+    painter.setPen(pen)
+    painter.setBrush(Qt.NoBrush)
+    painter.drawEllipse(centre, 10.4, 10.4)
+
+    # Ticks outside the ring rather than on it: at small sizes they blur into a halo, which still
+    # reads as a clock, where ticks drawn inside would have muddied the face itself.
+    tick = QPen(QColor(ICON_INK_BRIGHT))
+    tick.setWidthF(1.6)
+    tick.setCapStyle(Qt.RoundCap)
+    painter.setPen(tick)
+    for step in range(12):
+        angle = math.radians(step * 30)
+        cos, sin = math.cos(angle), math.sin(angle)
+        painter.drawLine(
+            QPointF(centre.x() + cos * 13.0, centre.y() + sin * 13.0),
+            QPointF(centre.x() + cos * 16.4, centre.y() + sin * 16.4),
+        )
+
+    hands = QPen(QColor(ICON_INK_BRIGHT))
+    hands.setWidthF(1.9)
+    hands.setCapStyle(Qt.RoundCap)
+    painter.setPen(hands)
+    painter.drawLine(centre, QPointF(centre.x() - 4.8, centre.y() - 6.0))   # short hand, to 10
+    painter.drawLine(centre, QPointF(centre.x() + 2.6, centre.y() - 8.2))   # long hand, to 12
+    painter.setBrush(QColor(ICON_INK_BRIGHT))
+    painter.setPen(Qt.NoPen)
+    painter.drawEllipse(centre, 1.15, 1.15)
+
+
+def _book(painter: QPainter) -> None:
+    """An open book: two pages sweeping down to a spine, drawn over the clock.
+
+    Each page is filled with the plate's own gradient before it is stroked, so the book stands in
+    front of the clock: the ticks and the lower arc that fall on a page disappear behind it, while
+    the ones in the opening between the pages stay. Painting the pages as bare outlines instead
+    left a clock drawn straight through the book, which reads as two flat stickers rather than one
+    object in front of another.
+    """
+    pen = QPen(QColor(ICON_INK))
+    pen.setWidthF(2.2)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(_plate_gradient())
+
+    for side in (-1, 1):
+        page = QPainterPath()
+        outer = 32 + side * 18.5
+        page.moveTo(QPointF(outer, 26.0))
+        page.lineTo(QPointF(outer, 43.5))
+        page.cubicTo(
+            QPointF(outer - side * 1.5, 49.0),
+            QPointF(32 + side * 7.5, 48.5),
+            QPointF(32, 51.5),
+        )
+        page.lineTo(QPointF(32, 38.5))
+        page.cubicTo(
+            QPointF(32 + side * 7.5, 35.5),
+            QPointF(outer - side * 1.5, 31.5),
+            QPointF(outer, 26.0),
+        )
+        painter.drawPath(page)
+
+
 def icon_pixmap(size: int) -> QPixmap:
     """The app mark at ``size`` logical pixels, painted at 2x so it stays sharp when scaled up.
 
-    A play triangle inside an all-but-closed ring: a timer that starts something, which is the
-    whole job. It replaces a small calendar glyph -- a calendar said what the window contains
-    rather than what the app does, and its six cells merged into a smear at the 16 px the tray
-    actually draws. Nothing here is smaller than a sixteenth of the icon, which is the rule that
-    keeps a mark legible all the way down.
+    An open book with a clock in it: the timetable, and the moment it is due. Everything is drawn
+    rather than shipped, for the same reason the interface glyphs are -- one drawing serves the
+    tray, the rail, the first screen and the .ico, and none of them can drift from the others.
     """
     scale = 2
     pixmap = QPixmap(size * scale, size * scale)
@@ -58,37 +153,9 @@ def icon_pixmap(size: int) -> QPixmap:
     painter.setRenderHint(QPainter.Antialiasing)
     painter.scale(size * scale / ICON_GRID, size * scale / ICON_GRID)
 
-    # A vertical gradient rather than a flat fill: an app icon in this design language is lit from
-    # above, and that shift is what keeps a large flat square from reading as a placeholder.
-    body = QLinearGradient(QPointF(32, 3), QPointF(32, 61))
-    body.setColorAt(0.0, QColor(ICON_BLUE_TOP))
-    body.setColorAt(1.0, QColor(ICON_BLUE_BOTTOM))
-    painter.setPen(Qt.NoPen)
-    painter.setBrush(body)
-    painter.drawRoundedRect(QRectF(3, 3, 58, 58), 15, 15)
-
-    ring = QPen(QColor(ICON_INK))
-    ring.setWidthF(5.4)
-    ring.setCapStyle(Qt.RoundCap)
-    painter.setPen(ring)
-    painter.setBrush(Qt.NoBrush)
-    # Open at the top right, where the triangle points: the gap reads as a dial still running.
-    painter.drawArc(QRectF(13.5, 13.5, 37, 37), 62 * 16, 296 * 16)
-
-    # Optically centred, not arithmetically: a triangle pointing right carries its weight to the
-    # left, so it sits a shade past the middle or the mark looks like it is drifting.
-    play = QPainterPath()
-    play.moveTo(QPointF(27.0, 23.5))
-    play.lineTo(QPointF(42.0, 32.0))
-    play.lineTo(QPointF(27.0, 40.5))
-    play.closeSubpath()
-    nib = QPen(QColor(ICON_INK))
-    nib.setWidthF(3.2)
-    nib.setJoinStyle(Qt.RoundJoin)
-    nib.setCapStyle(Qt.RoundCap)
-    painter.setPen(nib)
-    painter.setBrush(QColor(ICON_INK))
-    painter.drawPath(play)
+    _plate(painter)
+    _clock(painter)
+    _book(painter)
 
     painter.end()
     pixmap.setDevicePixelRatio(scale)

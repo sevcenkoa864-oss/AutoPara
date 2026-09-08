@@ -5,10 +5,11 @@ grid, and opens each class's Zoom / Google Meet link in the default browser a mi
 starts. **The application's interface is Ukrainian**; this README and the design docs are English,
 for whoever maintains it.
 
-The interface follows Apple's Human Interface Guidelines as far as Qt allows: one accent colour,
-squircle corners, hairlines instead of boxes, a light and a dark theme designed together, and a
-72 px icon rail down the left rather than a toolbar across the top — the week grid is wide and
-short, and a top bar spends the height a calendar is always short of.
+The interface takes its shape and spacing from Apple's Human Interface Guidelines as far as Qt
+allows — squircle corners, hairlines instead of boxes, one tint used only where it means something
+— over a palette of its own: `#6067e5` on white, or on `#0f1319` in the dark. The chrome is a 72 px
+icon rail down the left rather than a toolbar across the top, because the week grid is wide and
+short and a top bar spends the height a calendar is always short of.
 
 ![week grid](docs/week-grid.png)
 

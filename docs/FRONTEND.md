@@ -292,21 +292,31 @@ Styling lives in `ui/styles.qss`, a template whose colours are `$tokens` substit
 wrong in the other. Subject colours have a second palette lifted for dark backgrounds
 (`class_card.SUBJECT_COLORS_DARK`), chosen by the same hash so a subject keeps its identity in both.
 
-The palette is **Apple's semantic colours** — `label`, `systemBackground`, `separator`, `systemBlue`
-and the rest — resolved to opaque hex rather than kept translucent. Apple states most of the greys
-as alpha over an unknown backdrop; Qt's stylesheet parser is inconsistent about alpha, and the same
-translucent grey would composite differently on a card, on a tinted grid cell and on the sidebar.
+Each theme is **given four colours** and derives the rest of its ~45 tokens from them:
 
-`systemBlue` is split into three tokens because one blue cannot do all three jobs at AA contrast:
+| | Light | Dark | |
+|---|---|---|---|
+| `bg` | `#ffffff` | `#0f1319` | the window |
+| `card_bg` | `#f5f9fa` | `#131920` | the shape a class sits on — and the rail, and every recessed group |
+| `accent` | `#6067e5` | `#6067e5` | the one tint, the same in both themes |
+| `text` | `#434958` | `#b3bdd3` | text and icons |
+
+Everything else — the muted and faint inks, the three weights of hairline, the tinted state fills —
+is a step off one of those four, and every pair that carries text is checked against WCAG AA.
+Values are opaque hex rather than translucent: Qt's stylesheet parser is inconsistent about alpha,
+and one translucent grey would composite differently on a card, on a tinted grid cell and on the
+rail.
+
+The accent is split into three tokens, because one colour cannot do all three of its jobs at AA:
 
 | Token | Job | Why not just `accent` |
 |---|---|---|
-| `accent` | Borders, indicators, focus rings, the dashed drop outline | UI components need 3:1, which `#007aff` clears |
-| `accent_fill` | The prominent button's fill | White on `#007aff` is 4.02:1 — under AA for a button label |
-| `accent_ink` | The accent used **as text** | Same reason, in the other direction |
+| `accent` | Borders, indicators, focus rings, the dashed drop outline | UI components need 3:1, which `#6067e5` clears in both themes |
+| `accent_fill` | The prominent button's fill | White on `#6067e5` is 4.6:1 — enough, and the token exists so a future accent cannot quietly stop being |
+| `accent_ink` | The accent used **as text** | `#6067e5` on the dark background is 4.05:1, under AA, so the dark theme reads with a lighter `#8f95f0` |
 
-The dark theme's window colour is `#1c1c1e`, not black: a desktop-sized window in pure black reads
-as a hole punched in the screen, and macOS keeps black for full-screen media rather than windows.
+The dark window colour is `#0f1319`, not black: a desktop-sized window in pure black reads as a
+hole punched in the screen.
 
 ## State management
 
@@ -347,9 +357,9 @@ the accent colour was the alternative, and a solid coloured square does not read
   the default `QPushButton` (soft `sunken` fill, no outline), and `#Plain` (accent text, no fill).
   Footers put the plain action left of the prominent one — Qt's `QDialogButtonBox` puts it the other
   way round on Windows, which is why the dialogs lay their footers out by hand.
-- Subject colour: deterministic hash of the subject name into a fixed palette of Apple's system
-  colours, so the same subject keeps its colour across sessions and re-imports. Blue is deliberately
-  absent from that palette — it is the accent, and a subject wearing the accent reads as selected.
+- Subject colour: deterministic hash of the subject name into a fixed palette, so the same subject
+  keeps its colour across sessions and re-imports. Neither blue nor indigo is in that palette — a
+  subject wearing the interface's own blue-violet reads as selected rather than as itself.
 - Font: **Google Sans**, bundled in `ui/fonts` (Regular / Medium / SemiBold / Bold) under the SIL
   Open Font License — Google publishes it on Google Fonts, so it redistributes like any other open
   font. It covers Cyrillic, which the interface needs, and it has a real SemiBold, so `font-weight:

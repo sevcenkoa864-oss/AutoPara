@@ -52,18 +52,19 @@ STATE_TEXT = {
     "nolink": "без посилання",
 }
 
-# Apple's system colours in their light variants. A subject always hashes to the same entry, so
-# its colour is stable across sessions and re-imports (docs/FRONTEND.md). Blue is deliberately
-# absent: it is the accent, and a subject wearing the accent would read as selected.
+# A subject always hashes to the same entry, so its colour is stable across sessions and
+# re-imports (docs/FRONTEND.md). Nothing here is close to the accent: a subject wearing the
+# interface's own blue-violet would read as selected rather than as itself, which rules out both
+# blue and indigo.
 SUBJECT_COLORS = [
-    "#34c759", "#5856d6", "#ff9500", "#ff2d55", "#30b0c7",
-    "#af52de", "#ff3b30", "#00c7be", "#a2845e", "#ff6482",
+    "#34c759", "#ff9500", "#ff2d55", "#30b0c7", "#af52de",
+    "#ff3b30", "#00c7be", "#a2845e", "#ff6482", "#8a6d3b",
 ]
 
 # The dark variants of the same colours, so a subject keeps its identity between themes.
 SUBJECT_COLORS_DARK = [
-    "#30d158", "#5e5ce6", "#ff9f0a", "#ff375f", "#40c8e0",
-    "#bf5af2", "#ff453a", "#66d4cf", "#b59469", "#ff7b8a",
+    "#30d158", "#ff9f0a", "#ff375f", "#40c8e0", "#bf5af2",
+    "#ff453a", "#66d4cf", "#b59469", "#ff7b8a", "#c4a06a",
 ]
 
 
