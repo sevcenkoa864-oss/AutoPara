@@ -20,11 +20,26 @@ Its structure, **verified by parsing the actual file** rather than assumed:
 |---|---|
 | Courses / tables | 6 |
 | Total lesson events | **77** |
-| Events with a link | **60** |
-| Events without a link | **17** |
+| Events with a link | 60 (revision-dependent, **not** asserted) |
+| Events without a link | 17 (revision-dependent, **not** asserted) |
 | Per course (I..VI) | 25, 11, 12, 13, **0**, 16 |
-| Distinct hyperlink relationships | 60 (20 unique URLs) |
+| Distinct hyperlink relationships | 60 elements, 20 unique URLs |
 | Providers | 49 Zoom, 11 Google Meet |
+
+> **Link counts are not regression fixtures.** The university fills missing links in over time --
+> between two revisions of this document the linked total moved 60 -> 63 while the structure was
+> byte-identical. Hard-coding the count produces a test that fails on a *document* change rather
+> than a *code* change, so the link tests compare against the document itself instead:
+>
+> * `test_link_count_matches_the_document` -- linked lessons == the number of `<w:hyperlink>`
+>   elements. Catches a link dropped from one lesson (which a URL-set comparison cannot see,
+>   because ~20 URLs are shared across ~60 lessons).
+> * `test_parser_finds_exactly_the_links_the_document_contains` -- the set of parsed URLs equals
+>   the set of relationship targets. Catches mangled or invented URLs.
+>
+> Both oracles read the `.docx` zip directly and share no code with the importer. The structural
+> numbers above (77 lessons, per-course counts) *are* asserted: they describe merge handling and
+> hold across every revision seen so far.
 
 Course V (`51 група`) legitimately has **no classes at all** — an empty schedule is a valid state,
 not an import failure.

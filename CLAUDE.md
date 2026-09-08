@@ -16,7 +16,7 @@ files.
 ## Commands
 
 ```bash
-python -m pytest                       # all 191 tests (~17 s)
+python -m pytest                       # all 195 tests (~18 s)
 python -m pytest tests/test_parser.py  # one file
 python -m pytest -k shared             # by keyword
 python -m pytest "tests/test_parser.py::TestMergeHandling::test_shared_class_is_one_lesson_with_many_groups"
@@ -35,8 +35,13 @@ No linter or formatter is configured; match the surrounding style.
 ### Test environment
 
 - Tests need the **real schedule `.docx`, which is not in the repo** (it holds live meeting links).
-  `tests/conftest.py` finds it on the Desktop or via `AUTOPARA_TEST_DOCX`, and **skips** if absent —
-  so a "passing" run that skipped everything is not a passing run. Check the count.
+  `tests/conftest.py` searches the Desktop, Downloads (one level deep, so the messaging app's folder
+  counts) and `%APPDATA%\AutoPara\schedules`, or takes `AUTOPARA_TEST_DOCX`. If it is missing,
+  100+ tests **skip** and the run still reads green — so pytest's header prints which document was
+  used, or `NOT FOUND`. Read that line before trusting a pass.
+- **Never assert an exact link count.** The university fills links in over time (60 → 63 between two
+  revisions with identical structure). Link tests compare against oracles read from the `.docx`
+  itself; see `docs/BACKEND.md` section 1.
 - The browser is always stubbed and the scheduler's clock is injected; tests never open a URL and
   never wait on real time.
 - Qt allows **one application object per process**, so every Qt-dependent test must use the shared

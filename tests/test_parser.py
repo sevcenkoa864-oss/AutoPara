@@ -26,9 +26,12 @@ from autopara.importer.normalize import (
     parse_time_range,
 )
 
+# Structural fixtures: these describe how the parser resolves merges, and hold for every revision
+# of this timetable. The *number of links* deliberately is not fixed here -- the university fills
+# missing links in over time (60 -> 63 between two revisions), so an exact count is a test that
+# fails on a document change rather than on a code change. Links are checked against the document
+# itself instead; see TestLinkExtraction.
 EXPECTED_TOTAL = 77
-EXPECTED_WITH_LINK = 60
-EXPECTED_WITHOUT_LINK = 17
 EXPECTED_PER_COURSE = [25, 11, 12, 13, 0, 16]
 
 
@@ -39,10 +42,14 @@ class TestDocumentTotals:
     def test_total_lessons(self, lessons):
         assert len(lessons) == EXPECTED_TOTAL
 
-    def test_link_split(self, lessons):
+    def test_every_lesson_is_either_linked_or_flagged(self, lessons):
+        """The two groups partition the lessons -- nothing is both, nothing is neither."""
         with_link = [lesson for lesson in lessons if lesson.url]
-        assert len(with_link) == EXPECTED_WITH_LINK
-        assert len(lessons) - len(with_link) == EXPECTED_WITHOUT_LINK
+        without_link = [lesson for lesson in lessons if not lesson.url]
+        assert len(with_link) + len(without_link) == len(lessons)
+        assert with_link, "the timetable is expected to contain meeting links"
+        assert all(lesson.needs_link for lesson in without_link)
+        assert not any(lesson.needs_link for lesson in with_link)
 
     def test_lessons_per_course(self, courses):
         assert [len(course.lessons) for course in courses] == EXPECTED_PER_COURSE
@@ -124,10 +131,37 @@ class TestLinkExtraction:
                 assert lesson.url.count("http") == 1
 
     def test_url_absent_lessons_are_flagged(self, lessons):
+        """A class with no link must never be auto-opened, so it carries needs_link and no provider."""
         without = [lesson for lesson in lessons if not lesson.url]
-        assert len(without) == EXPECTED_WITHOUT_LINK
+        assert without, "this timetable has classes with no link (e.g. 'див. розклад на сайті')"
         assert all(lesson.needs_link for lesson in without)
         assert all(lesson.provider == "unknown" for lesson in without)
+
+    def test_parser_finds_exactly_the_links_the_document_contains(
+        self, lessons, hyperlink_targets
+    ):
+        """The strong link assertion, and the reason no count is hard-coded.
+
+        Compared against hyperlink targets read straight from the .docx zip, so it holds for any
+        revision of the timetable while still catching a parser that drops a link or mangles a URL.
+        """
+        parsed = {lesson.url for lesson in lessons if lesson.url}
+        assert hyperlink_targets - parsed == set(), "parser dropped links present in the document"
+        assert parsed - hyperlink_targets == set(), "parser produced a URL not in the document"
+
+    def test_link_count_matches_the_document(self, lessons, hyperlink_element_count):
+        """Guards against losing a link from one lesson while the same URL survives on another.
+
+        The document reuses ~20 URLs across ~60 lessons, so comparing sets of URLs cannot see a
+        per-lesson loss; comparing counts can.
+        """
+        linked = [lesson for lesson in lessons if lesson.url]
+        assert len(linked) == hyperlink_element_count
+
+    def test_every_link_is_reachable_from_some_lesson(self, lessons, hyperlink_targets):
+        """A link that parses but attaches to no lesson would never open."""
+        for target in hyperlink_targets:
+            assert any(lesson.url == target for lesson in lessons), f"orphaned link: {target}"
 
     def test_subject_text_excludes_the_url(self, lessons):
         for lesson in lessons:

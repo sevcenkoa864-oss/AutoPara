@@ -16,8 +16,14 @@ from pathlib import Path
 import pytest
 
 _ENV_VAR = "AUTOPARA_TEST_DOCX"
+# Searched in order. The timetable tends to migrate between the Desktop, the Downloads folder and
+# wherever the messaging app dropped it, and a suite that silently skips 100+ tests because it could
+# not find the file looks exactly like a passing suite -- hence the wide net and the report header.
 _FALLBACK_GLOBS = [
     str(Path.home() / "Desktop" / "*розклад*.docx"),
+    str(Path.home() / "Downloads" / "*розклад*.docx"),
+    str(Path.home() / "Downloads" / "*" / "*розклад*.docx"),
+    str(Path(os.environ.get("APPDATA", Path.home())) / "AutoPara" / "schedules" / "*.docx"),
     str(Path.home() / "Desktop" / "*.docx"),
 ]
 
@@ -31,6 +37,18 @@ def _locate() -> str | None:
         if matches:
             return matches[0]
     return None
+
+
+def pytest_report_header(config) -> str:
+    """Say which timetable the run used.
+
+    Without this a missing document is invisible: every document-backed test skips and the summary
+    still reads green.
+    """
+    path = _locate()
+    if not path:
+        return f"schedule document: NOT FOUND -- document-backed tests will SKIP (set {_ENV_VAR})"
+    return f"schedule document: {path}"
 
 
 @pytest.fixture(scope="session")
@@ -71,3 +89,38 @@ def qapp():
 def gui_app(qapp):
     """Alias kept for widget tests, so their intent reads clearly."""
     return qapp
+
+
+@pytest.fixture(scope="session")
+def hyperlink_targets(schedule_path) -> set[str]:
+    """Every hyperlink target in the document, read straight from the zip.
+
+    Deliberately bypasses the importer: this is the independent oracle the link tests compare
+    against, so it must not share code (or bugs) with the parser under test.
+    """
+    import zipfile
+    from xml.etree import ElementTree as ET
+
+    with zipfile.ZipFile(schedule_path) as archive:
+        rels = ET.fromstring(archive.read("word/_rels/document.xml.rels"))
+    return {
+        rel.get("Target")
+        for rel in rels
+        if "hyperlink" in (rel.get("Type") or "") and rel.get("Target")
+    }
+
+
+@pytest.fixture(scope="session")
+def hyperlink_element_count(schedule_path) -> int:
+    """How many <w:hyperlink> elements the document contains.
+
+    Each lesson cell carries at most one, and neither a gridSpan (shared class) nor a vMerge
+    continuation duplicates it, so this equals the number of lessons that should end up with a
+    link. Counting elements -- rather than unique URLs -- is what catches a link dropped from one
+    lesson while the same URL survives on another.
+    """
+    import zipfile
+
+    with zipfile.ZipFile(schedule_path) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+    return document.count("<w:hyperlink")
