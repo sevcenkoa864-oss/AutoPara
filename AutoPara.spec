@@ -10,11 +10,26 @@
 
 block_cipher = None
 
+# Windows reads the executable's icon from a compiled-in .ico, so build.ps1 renders one from the
+# app's own drawing (autopara/ui/tray.write_ico) before invoking PyInstaller. Building the spec by
+# hand without that step is allowed -- the bundle just carries PyInstaller's stock icon, which is
+# the Python logo, and the desktop shortcut with it.
+import os
+
+APP_ICON = os.path.join("build", "AutoPara.ico")
+if not os.path.isfile(APP_ICON):
+    print(f"AutoPara.spec: {APP_ICON} is missing; the exe will keep PyInstaller's stock icon")
+    APP_ICON = None
+
 analysis = Analysis(
     ["autopara_launch.pyw"],
     pathex=["."],
     binaries=[],
-    datas=[("autopara/ui/styles.qss", "autopara/ui")],
+    datas=[
+        ("autopara/ui/styles.qss", "autopara/ui"),
+        # Google Sans and its licence: the interface font is bundled, not assumed installed.
+        ("autopara/ui/fonts", "autopara/ui/fonts"),
+    ],
     hiddenimports=["autopara"],
     hookspath=[],
     runtime_hooks=[],
@@ -53,6 +68,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,  # no console window at logon
+    icon=APP_ICON,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

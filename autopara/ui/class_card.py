@@ -39,6 +39,12 @@ PROVIDER_LABEL = {PROVIDER_ZOOM: "Zoom", PROVIDER_MEET: "Meet", "unknown": "—"
 # stale card can never carry stale lesson data across.
 LESSON_MIME = "application/x-autopara-lesson"
 
+# The card's own padding. Named because the height budget in ``_fit`` has to agree with the
+# layout exactly -- a card that thinks it is 2 px smaller than it is clips a line for nothing.
+CARD_MARGIN_H = 10
+CARD_MARGIN_V = 6
+CARD_SPACING = 2
+
 STATE_TEXT = {
     "opened": "✓ відкрито",
     "missed": "не відкрито",
@@ -46,17 +52,18 @@ STATE_TEXT = {
     "nolink": "без посилання",
 }
 
-# A fixed pastel palette; a subject always hashes to the same entry so its color is stable across
-# sessions and re-imports (docs/FRONTEND.md).
+# Apple's system colours in their light variants. A subject always hashes to the same entry, so
+# its colour is stable across sessions and re-imports (docs/FRONTEND.md). Blue is deliberately
+# absent: it is the accent, and a subject wearing the accent would read as selected.
 SUBJECT_COLORS = [
-    "#1a73e8", "#188038", "#a142f4", "#e37400", "#d93025",
-    "#12b5cb", "#c5221f", "#7627bb", "#00897b", "#ad1457",
+    "#34c759", "#5856d6", "#ff9500", "#ff2d55", "#30b0c7",
+    "#af52de", "#ff3b30", "#00c7be", "#a2845e", "#ff6482",
 ]
 
-# The same hues lifted for legibility on a dark surface.
+# The dark variants of the same colours, so a subject keeps its identity between themes.
 SUBJECT_COLORS_DARK = [
-    "#8ab4f8", "#81c995", "#c58af9", "#fdd663", "#f28b82",
-    "#78d9ec", "#f6aea9", "#d7aefb", "#5bd1c5", "#ff8bcb",
+    "#30d158", "#5e5ce6", "#ff9f0a", "#ff375f", "#40c8e0",
+    "#bf5af2", "#ff453a", "#66d4cf", "#b59469", "#ff7b8a",
 ]
 
 
@@ -80,11 +87,24 @@ class ClassCard(QFrame):
     menu_requested = Signal(int)  # lesson id -- right click: the actions menu
 
     def __init__(
-        self, lesson: Lesson, status: str | None = None, is_next: bool = False, parent=None
+        self,
+        lesson: Lesson,
+        status: str | None = None,
+        is_next: bool = False,
+        parent=None,
+        height: int | None = None,
     ):
+        """``height`` is how many pixels the grid will actually give this card.
+
+        The card is exactly as tall as its class is long, so a long subject cannot be shown in
+        full and something has to give. Told the height, the card decides *what* to leave out --
+        and leaves out whole lines. Left to the layout it overflowed instead, and a card cut
+        through the middle of a word looks like a rendering fault rather than a calendar.
+        """
         super().__init__(parent)
         self.lesson = lesson
         self.status = status
+        self._height = height
         self.setObjectName("ClassCard")
         self.setCursor(Qt.PointingHandCursor)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -117,18 +137,59 @@ class ClassCard(QFrame):
             )
 
     def _add_shadow(self) -> None:
+        """The one depth cue Qt can give a card -- QSS has no box-shadow.
+
+        Wide and faint rather than tight and dark: a card should look lifted off the grid, not
+        outlined a second time. The dark theme needs a heavier alpha because a shadow barely
+        registers against a dark surface at all.
+        """
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(6)
-        shadow.setOffset(0, 1)
-        shadow.setColor(QColor(0, 0, 0, 110) if theme.is_dark() else QColor(60, 64, 67, 40))
+        shadow.setBlurRadius(12)
+        shadow.setOffset(0, 2)
+        shadow.setColor(QColor(0, 0, 0, 90) if theme.is_dark() else QColor(0, 0, 0, 28))
         self.setGraphicsEffect(shadow)
 
     # ------------------------------------------------------------------ layout
 
+    # Ranked by what a timetable is for: the subject first, then who teaches it, and last the
+    # time -- which the card's own position on the grid already says, and the tooltip repeats.
+    # The first arrangement that fits the card's height is the one it gets.
+    LAYOUTS = (
+        (2, True, True),
+        (2, True, False),
+        (2, False, True),
+        (1, True, True),
+        (1, True, False),
+        (1, False, True),
+        (1, False, False),
+    )
+
+    def _fit(self, line_heights: tuple[int, int, int, int]) -> tuple[int, bool, bool]:
+        """Pick the richest of ``LAYOUTS`` that fits, or the barest one if none does."""
+        top_height, subject_line, teacher_line, time_height = line_heights
+        if self._height is None:
+            return self.LAYOUTS[0]
+        for subject_lines, with_teacher, with_time in self.LAYOUTS:
+            rows = 2 + int(with_teacher) + int(with_time)
+            needed = (
+                CARD_MARGIN_V * 2
+                + top_height
+                + subject_lines * subject_line
+                + (teacher_line if with_teacher else 0)
+                + (time_height if with_time else 0)
+                + (rows - 1) * CARD_SPACING
+            )
+            if needed <= self._height:
+                return subject_lines, with_teacher, with_time
+        return self.LAYOUTS[-1]
+
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(9, 7, 9, 7)
-        layout.setSpacing(3)
+        # Tight, because the card only ever gets as many pixels as its class lasts: the standard
+        # 80-minute pair is 88 px, and every pixel spent on padding is a line of the subject that
+        # does not fit. See docs/FRONTEND.md, "One minute, a fixed number of pixels".
+        layout.setContentsMargins(CARD_MARGIN_H, CARD_MARGIN_V, CARD_MARGIN_H, CARD_MARGIN_V)
+        layout.setSpacing(CARD_SPACING)
 
         top = QHBoxLayout()
         top.setSpacing(5)
@@ -136,6 +197,10 @@ class ClassCard(QFrame):
         badge.setObjectName("CardBadge")
         badge.setProperty("provider", self.lesson.provider)
         top.addWidget(badge)
+        # Every widget on the badge row, so its height is measured rather than guessed from the
+        # provider pill: a state badge or a group chip can be the tallest thing on it, and a row
+        # two pixels taller than the budget expected clips the line at the bottom of the card.
+        top_widgets = [badge]
 
         state_text = STATE_TEXT.get(self.state)
         if state_text:
@@ -143,36 +208,66 @@ class ClassCard(QFrame):
             state_badge.setObjectName("StateBadge")
             state_badge.setProperty("state", self.state)
             top.addWidget(state_badge)
+            top_widgets.append(state_badge)
         top.addStretch(1)
+
+        # The group chip rides on the badge row rather than beside the time, so a card too short
+        # for a time row still says that the class is shared.
+        count = len(self.lesson.group_names)
+        if count > 1:
+            chip = QLabel(f"{count} {groups_word(count)}")
+            chip.setObjectName("GroupChip")
+            chip.setToolTip("Спільна пара: " + ", ".join(self.lesson.group_names))
+            top.addWidget(chip)
+            top_widgets.append(chip)
         layout.addLayout(top)
 
         subject = QLabel(self.lesson.subject)
         subject.setObjectName("CardSubject")
         subject.setWordWrap(True)
         subject.setProperty("muted", "true" if self.state in ("opened", "skipped") else "false")
-        layout.addWidget(subject)
 
+        teacher = None
         if self.lesson.teacher:
             teacher = QLabel(self.lesson.teacher.strip("()"))
             teacher.setObjectName("CardTeacher")
+            # Wrapped, then capped to one line: without the wrap the label demands the width of
+            # the whole name as its minimum, and six columns of that push the last day of the
+            # week off the screen.
             teacher.setWordWrap(True)
+
+        time_label = QLabel(f"{self.lesson.start_time}–{self.lesson.end_time}")
+        time_label.setObjectName("CardTime")
+
+        # Полірування -- це те, що застосовує таблицю стилів, а без неї шрифт іще не той, яким
+        # напис справді малюватиметься, і всі виміри були б від іншого розміру.
+        for widget in (*top_widgets, subject, teacher, time_label):
+            if widget is not None:
+                widget.ensurePolished()
+
+        subject_lines, with_teacher, with_time = self._fit(
+            (
+                max(widget.sizeHint().height() for widget in top_widgets),
+                subject.fontMetrics().lineSpacing(),
+                teacher.fontMetrics().lineSpacing() if teacher else 0,
+                time_label.sizeHint().height(),
+            )
+        )
+
+        # A maximum in whole lines: the label then cuts a line off rather than through it.
+        subject.setMaximumHeight(subject_lines * subject.fontMetrics().lineSpacing())
+        layout.addWidget(subject)
+
+        if teacher is not None and with_teacher:
+            teacher.setMaximumHeight(teacher.fontMetrics().lineSpacing())
             layout.addWidget(teacher)
 
         layout.addStretch(1)
 
-        bottom = QHBoxLayout()
-        bottom.setSpacing(5)
-        time_label = QLabel(f"{self.lesson.start_time}–{self.lesson.end_time}")
-        time_label.setObjectName("CardTime")
-        bottom.addWidget(time_label)
-        bottom.addStretch(1)
-        count = len(self.lesson.group_names)
-        if count > 1:
-            chip = QLabel(f"{count} {groups_word(count)}")
-            chip.setObjectName("GroupChip")
-            chip.setToolTip("Спільна пара: " + ", ".join(self.lesson.group_names))
-            bottom.addWidget(chip)
-        layout.addLayout(bottom)
+        if with_time:
+            layout.addWidget(time_label)
+        else:
+            time_label.deleteLater()
 
         tooltip = [self.lesson.subject]
         if self.lesson.teacher:
@@ -181,7 +276,9 @@ class ClassCard(QFrame):
         if self.lesson.group_names:
             tooltip.append("Групи: " + ", ".join(self.lesson.group_names))
         tooltip.append(self.lesson.url if self.lesson.url else "Без посилання")
-        tooltip.append("Клацніть, щоб обрати дію · перетягніть, щоб перенести")
+        # The card is trimmed to the length of its class, so the tooltip is where the whole of a
+        # long subject, a full teacher's name and the exact times stay reachable.
+        tooltip.append("Клац — підключитися · правий клац — меню · перетягніть, щоб перенести")
         self.setToolTip("\n".join(tooltip))
 
     # ------------------------------------------------------------------ events

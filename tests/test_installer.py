@@ -173,3 +173,52 @@ class TestThereIsOnlyOneInstaller:
         build = (NSI_PATH.parents[1] / "build.ps1").read_text(encoding="utf-8")
         assert "makensis" in build
         assert "AutoPara.nsi" in build
+
+
+class TestApplicationIcon:
+    """The desktop shortcut, the taskbar button and the tray must all show the same mark.
+
+    Every assertion here exists because the build shipped PyInstaller's stock icon -- the Python
+    logo -- and the desktop shortcut inherited it, so AutoPara looked like a Python script.
+    """
+
+    def test_the_spec_compiles_an_icon_into_the_executable(self):
+        spec = (Path(__file__).resolve().parents[1] / "AutoPara.spec").read_text(encoding="utf-8")
+        assert "icon=APP_ICON" in spec, "the exe icon is what every shortcut inherits"
+        assert "build" in spec and "AutoPara.ico" in spec
+
+    def test_the_build_script_renders_that_icon_first(self):
+        script = (Path(__file__).resolve().parents[1] / "build.ps1").read_text(encoding="utf-8")
+        assert "write_ico" in script, "the .ico is generated, not committed"
+        rendering = script.index("write_ico")
+        building = script.index("python -m PyInstaller")
+        assert rendering < building, "the icon has to exist before PyInstaller reads the spec"
+
+    def test_the_icon_file_carries_every_size_windows_asks_for(self, tmp_path, gui_app):
+        """A missing size is a blurry icon in whichever slot needed it."""
+        import struct
+
+        from autopara.ui.tray import ICO_SIZES, write_ico
+
+        raw = write_ico(tmp_path / "AutoPara.ico").read_bytes()
+        reserved, kind, count = struct.unpack("<HHH", raw[:6])
+        assert (reserved, kind) == (0, 1), "an .ico starts 0, 1"
+        assert count == len(ICO_SIZES)
+
+        for index, size in enumerate(ICO_SIZES):
+            entry = raw[6 + 16 * index : 22 + 16 * index]
+            width, height, _, _, planes, bits, length, offset = struct.unpack("<BBBBHHII", entry)
+            # 256 is stored as 0: the field is a single byte.
+            assert (width, height) == (size % 256, size % 256)
+            assert (planes, bits) == (1, 32)
+            assert raw[offset : offset + 8] == b"\x89PNG\r\n\x1a\n", "entries are PNGs"
+            assert length > 0
+
+    def test_the_app_claims_its_own_taskbar_identity(self):
+        """Without an AppUserModelID Windows hangs the button on python.exe and shows its icon."""
+        app = (Path(__file__).resolve().parents[1] / "autopara" / "app.py").read_text(
+            encoding="utf-8"
+        )
+        assert "SetCurrentProcessExplicitAppUserModelID" in app
+        claim = app.index("_claim_taskbar_identity()\n        self.qt.setWindowIcon")
+        assert claim > 0, "the identity must be claimed before the first window exists"

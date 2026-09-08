@@ -10,10 +10,11 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QFrame,
+    QHBoxLayout,
     QLabel,
+    QPushButton,
     QMessageBox,
     QRadioButton,
     QSpinBox,
@@ -57,15 +58,15 @@ class SettingsDialog(QDialog):
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 18, 20, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
 
         title = QLabel("Налаштування")
         title.setObjectName("TitleLabel")
         layout.addWidget(title)
 
         form = QFormLayout()
-        form.setSpacing(9)
+        form.setSpacing(11)
 
         self.lead_spin = QSpinBox()
         self.lead_spin.setRange(0, 120)
@@ -145,14 +146,23 @@ class SettingsDialog(QDialog):
         self.duration_hint.setWordWrap(True)
         layout.addWidget(self.duration_hint)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
-        save = buttons.button(QDialogButtonBox.Save)
+        # Кнопки шикуються вручну, а не через QDialogButtonBox: на Windows той ставить
+        # головну дію ліворуч, а в цій мові інтерфейсу вона завжди крайня праворуч.
+        footer = QHBoxLayout()
+        footer.setSpacing(8)
+        footer.addStretch(1)
+
+        cancel = QPushButton("Скасувати")
+        cancel.setObjectName("Plain")
+        cancel.clicked.connect(self.reject)
+        footer.addWidget(cancel)
+
+        save = QPushButton("Зберегти")
         save.setObjectName("Primary")
-        save.setText("Зберегти")
-        buttons.button(QDialogButtonBox.Cancel).setText("Скасувати")
-        buttons.accepted.connect(self._accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        save.setDefault(True)
+        save.clicked.connect(self._accept)
+        footer.addWidget(save)
+        layout.addLayout(footer)
 
     # ------------------------------------------------------------------- state
 

@@ -9,7 +9,7 @@ import logging
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QTimer
+from PySide6.QtGui import QFontDatabase
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
@@ -17,12 +17,18 @@ from .core import autostart, refresh, theme
 from .core.scheduler import Scheduler
 from .core.storage import Storage, default_db_path
 from .ui.main_window import MainWindow
-from .ui.setup_dialog import SetupDialog
 from .ui.tray import Tray, build_icon
 
 log = logging.getLogger(__name__)
 
 SERVER_NAME = "AutoPara.SingleInstance"
+
+# Windows groups taskbar buttons by this string and takes the icon from whatever owns it. Left
+# unset, the owner is the *host* process -- python.exe when running from source -- so AutoPara sat
+# in the taskbar under Python's icon however carefully its own window icon was set.
+APP_USER_MODEL_ID = "MaBoRo.AutoPara"
+
+FONT_DIR = Path(__file__).resolve().parent / "ui" / "fonts"
 
 
 def _configure_logging() -> None:
@@ -32,6 +38,39 @@ def _configure_logging() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=[logging.FileHandler(log_path, encoding="utf-8")],
     )
+
+
+def _claim_taskbar_identity() -> None:
+    """Tell Windows this process is AutoPara, not whatever launched it.
+
+    Must run before the first window appears; after that the shell has already decided. Failing is
+    not worth stopping for -- the app simply keeps the interpreter's icon, which is what it had
+    before this existed.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except (AttributeError, OSError):  # pragma: no cover - depends on the Windows build
+        log.warning("could not set the taskbar identity; the window icon may be the host's")
+
+
+def _load_fonts() -> None:
+    """Register the bundled Google Sans faces with Qt.
+
+    The interface is drawn in Google Sans, which ships with the app under the SIL Open Font
+    License rather than being assumed to be installed. Missing or unreadable files are not fatal
+    -- ``theme.interface_font()`` falls back to Segoe UI Variable, and an app that will not start
+    because of a font would be a far worse bug than one that looks slightly different.
+    """
+    if not FONT_DIR.is_dir():
+        log.warning("bundled fonts are missing from %s", FONT_DIR)
+        return
+    for path in sorted(FONT_DIR.glob("*.ttf")):
+        if QFontDatabase.addApplicationFont(str(path)) < 0:
+            log.warning("could not load the bundled font %s", path.name)
 
 
 def _already_running() -> bool:
@@ -59,7 +98,9 @@ class AutoParaApp:
         self.qt = qt or QApplication(argv)
         self.qt.setApplicationName("AutoPara")
         self.qt.setQuitOnLastWindowClosed(False)  # closing the window must not exit
+        _claim_taskbar_identity()
         self.qt.setWindowIcon(build_icon())
+        _load_fonts()
 
         self.storage = Storage()
         # The stored theme may be "system", which follows the Windows app theme -- that is what a
@@ -104,18 +145,14 @@ class AutoParaApp:
         autostart.sync(settings.autostart_enabled)
         self.storage.set_setting("autostart_enabled", "1" if autostart.is_enabled() else "0")
 
+        # A fresh install shows the import screen rather than a modal over an empty window:
+        # the screen explains what AutoPara wants and takes a dropped .docx, and its own button
+        # opens the same dialog for anyone who would rather browse.
         if not self.hidden:
             self.window.show()
-            if not settings.selected_group_id:
-                QTimer.singleShot(0, self._first_run)
 
         self.scheduler.start()
         return self.qt.exec()
-
-    def _first_run(self) -> None:
-        dialog = SetupDialog(self.storage, self.window)
-        if dialog.exec():
-            self.window.reload()
 
     # --------------------------------------------------------------- handlers
 

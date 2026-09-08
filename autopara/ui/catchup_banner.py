@@ -14,7 +14,9 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
+from ..core import theme
 from ..core.models import Lesson
+from . import icons
 
 
 class CatchupBanner(QFrame):
@@ -32,8 +34,13 @@ class CatchupBanner(QFrame):
 
     def _build(self) -> None:
         row = QHBoxLayout(self)
-        row.setContentsMargins(16, 10, 16, 10)
-        row.setSpacing(12)
+        row.setContentsMargins(20, 12, 20, 12)
+        row.setSpacing(14)
+
+        # Colour alone never carries meaning here: the amber strip also says what it is.
+        self.glyph = QLabel()
+        row.addWidget(self.glyph, 0)
+        self.repaint_glyph()
 
         texts = QVBoxLayout()
         texts.setSpacing(1)
@@ -52,8 +59,13 @@ class CatchupBanner(QFrame):
         row.addWidget(self.connect_button)
 
         self.close_button = QPushButton("Закрити")
+        self.close_button.setObjectName("Plain")
         self.close_button.clicked.connect(self._dismiss)
         row.addWidget(self.close_button)
+
+    def repaint_glyph(self) -> None:
+        """Значок намальований кодом, тож після зміни теми його треба перефарбувати."""
+        self.glyph.setPixmap(icons.pixmap("warning", theme.token("banner_text"), 22))
 
     # ------------------------------------------------------------------- queue
 

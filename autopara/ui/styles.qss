@@ -1,15 +1,22 @@
-/* AutoPara — calendar-like styling. See docs/FRONTEND.md.
+/* AutoPara — Apple-style interface. See docs/FRONTEND.md.
  *
  * This is a TEMPLATE, not a finished stylesheet: every colour is a dollar-prefixed token that
  * core/theme.py substitutes from the light or dark palette. Never hard-code a colour here — a
  * literal would look right in one theme and wrong in the other.
+ *
+ * Shape and spacing follow Apple's Human Interface Guidelines as far as Qt allows. What Qt does
+ * NOT allow, and which therefore lives in Python instead: shadows (QGraphicsDropShadowEffect in
+ * class_card.py), letter spacing, transitions, and any kind of backdrop blur. Radii are concentric
+ * — a control nested in a container gets a smaller radius than the container, or the curves clash.
  *
  * Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com */
 
 QWidget {
     background: $bg;
     color: $text;
-    font-family: "Segoe UI", "Segoe UI Variable", sans-serif;
+    /* One resolved family, not a fallback list: Qt honours only the first name in a QSS
+     * font-family, so the choice is made in core/theme.interface_font() instead. */
+    font-family: $font_family;
     font-size: 10pt;
 }
 
@@ -17,15 +24,25 @@ QMainWindow, QDialog {
     background: $bg;
 }
 
-/* ------------------------------------------------------------------ toolbar */
-
-#Toolbar {
-    background: $surface;
-    border-bottom: 1px solid $border_soft;
+/* The blanket QWidget rule above gives every label an opaque background, which paints a block of
+ * the window colour over whatever the label sits on. Invisible while the two colours agree, and a
+ * grey rectangle across every card the moment they do not. Labels take their surroundings. */
+QLabel {
+    background: transparent;
 }
 
+/* ------------------------------------------------------------------ sidebar */
+
+/* The window's actions live in a column on the left. The week grid is wide and short, so a strip
+ * across the top spent the height the calendar wants and left the width it does not need. */
+#Sidebar {
+    background: $sunken;
+    border-right: 1px solid $border_soft;
+}
+
+/* Dialogs still have a heading; the main window shows the app mark instead of its own name. */
 #TitleLabel {
-    font-size: 15pt;
+    font-size: 13pt;
     font-weight: 600;
     color: $text;
 }
@@ -35,45 +52,113 @@ QMainWindow, QDialog {
     font-size: 9pt;
 }
 
+/* ------------------------------------------------------------------ buttons */
+
+/* The secondary tier: a soft fill instead of an outline. Apple separates controls from their
+ * surroundings with fill and space, not with a box drawn around every one of them. */
 QPushButton {
-    background: $surface;
-    border: 1px solid $border;
-    border-radius: 6px;
-    padding: 6px 14px;
+    background: $sunken;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 14px;
     color: $text;
+    font-weight: 500;
 }
 
 QPushButton:hover {
-    background: $sunken;
-    border-color: $accent;
+    background: $chip_bg;
+    color: $accent_ink;
 }
 
 QPushButton:pressed {
-    background: $sunken;
+    background: $border_soft;
 }
 
 QPushButton:disabled {
     color: $text_faint;
-    border-color: $border_soft;
+    background: $sunken;
 }
 
+/* The prominent tier: exactly one per screen. A pill, because a standalone primary action is
+ * fully rounded in the current design language. min-height plus padding make the height 34, so
+ * the radius is exactly half of it. */
 QPushButton#Primary {
-    background: $accent;
-    border-color: $accent;
+    background: $accent_fill;
     color: $accent_text;
     font-weight: 600;
+    min-height: 18px;
+    padding: 8px 20px;
+    border-radius: 17px;
 }
 
 QPushButton#Primary:hover {
     background: $accent_hover;
+    color: $accent_text;
 }
 
+QPushButton#Primary:pressed {
+    background: $accent_hover;
+}
+
+QPushButton#Primary:disabled {
+    background: $sunken;
+    color: $text_faint;
+}
+
+/* The plain tier: no fill at all, for the action that is offered but not encouraged. */
+QPushButton#Plain {
+    background: transparent;
+    color: $accent_ink;
+    font-weight: 500;
+    padding: 8px 12px;
+}
+
+QPushButton#Plain:hover {
+    background: $accent_soft;
+}
+
+QPushButton#Plain:disabled {
+    background: transparent;
+    color: $text_faint;
+}
+
+/* The one prominent action, reduced to a circle. There is no room for a label on a rail this
+ * narrow, and a pill with nothing written on it is just a circle that has been stretched. */
+QPushButton#PrimaryRound {
+    background: $accent_fill;
+    border: none;
+    border-radius: 20px;
+    padding: 0;
+}
+
+QPushButton#PrimaryRound:hover {
+    background: $accent_hover;
+}
+
+QPushButton#PrimaryRound:pressed {
+    background: $accent_hover;
+}
+
+/* Icon-only rail buttons. Sized in Python (36x36); the meaning is in the tooltip. */
 QPushButton#IconButton {
-    padding: 5px 10px;
-    font-size: 11pt;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 0;
+}
+
+QPushButton#IconButton:hover {
+    background: $chip_bg;
+}
+
+QPushButton#IconButton:pressed {
+    background: $chip_bg;
 }
 
 /* --------------------------------------------------------------- week grid */
+
+/* Hairlines, not a spreadsheet: the day rule is the palette's faintest line and the hour rule
+ * only slightly stronger, so the grid guides the eye without competing with the cards on it. */
 
 #GridScroll {
     border: none;
@@ -81,22 +166,21 @@ QPushButton#IconButton {
 
 #DayHeader {
     background: $surface;
-    border-bottom: 1px solid $border_soft;
-    border-right: 1px solid $grid_line;
+    border-bottom: 1px solid $border;
 }
 
 #DayHeader[today="true"] {
-    background: $accent_soft;
+    background: $today_bg;
 }
 
 #DayName {
     color: $text_muted;
-    font-size: 8.5pt;
+    font-size: 9pt;
     font-weight: 600;
 }
 
 #DayName[today="true"] {
-    color: $accent;
+    color: $accent_ink;
 }
 
 #TimeGutter {
@@ -105,9 +189,9 @@ QPushButton#IconButton {
 }
 
 #HourLabel {
-    color: $text_muted;
+    color: $text_faint;
     font-size: 8.5pt;
-    font-weight: 600;
+    font-weight: 500;
 }
 
 #GridCell {
@@ -130,21 +214,17 @@ QPushButton#IconButton {
 
 #GridCell[dropping="true"] {
     background: $drop_bg;
-    border: 1px dashed $accent;
-}
-
-#CellHint {
-    color: $text_faint;
-    font-size: 8.5pt;
+    border: 2px dashed $accent;
+    border-radius: 10px;
 }
 
 /* -------------------------------------------------------------- class card */
 
 #ClassCard {
     background: $card_bg;
-    border: 1px solid $border;
+    border: 1px solid $border_soft;
     border-left: 4px solid $accent;
-    border-radius: 8px;
+    border-radius: 12px;
 }
 
 #ClassCard:hover {
@@ -182,7 +262,7 @@ QPushButton#IconButton {
 }
 
 #CardSubject[muted="true"] {
-    color: $text_faint;
+    color: $text_muted;
 }
 
 #CardTeacher {
@@ -195,10 +275,12 @@ QPushButton#IconButton {
     font-size: 8pt;
 }
 
+/* Badges are capsules: a short label on a coloured fill is a pill in this language, never a
+ * rounded rectangle. */
 #CardBadge {
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-size: 7.5pt;
+    border-radius: 8px;
+    padding: 2px 7px;
+    font-size: 8pt;
     font-weight: 600;
 }
 
@@ -218,10 +300,10 @@ QPushButton#IconButton {
 }
 
 #StateBadge {
-    font-size: 7.5pt;
+    font-size: 8pt;
     font-weight: 600;
-    border-radius: 4px;
-    padding: 1px 6px;
+    border-radius: 8px;
+    padding: 2px 7px;
 }
 
 #StateBadge[state="opened"] {
@@ -247,9 +329,9 @@ QPushButton#IconButton {
 #GroupChip {
     background: $chip_bg;
     color: $text_muted;
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 7.5pt;
+    border-radius: 8px;
+    padding: 2px 7px;
+    font-size: 8pt;
 }
 
 /* --------------------------------------------------------- missed-class bar */
@@ -261,21 +343,63 @@ QPushButton#IconButton {
 
 #CatchupText {
     color: $banner_text;
-    font-size: 9.5pt;
+    font-size: 10pt;
     font-weight: 600;
 }
 
 #CatchupDetail {
     color: $banner_text;
-    font-size: 8.5pt;
+    font-size: 9pt;
+}
+
+/* ---------------------------------------------------------- import landing */
+
+/* The first screen of a fresh install: a hero, and a well a .docx can be dropped into. */
+
+#HeroPlate {
+    background: $hero_bg;
+    border-radius: 22px;
+}
+
+#HeroTitle {
+    font-size: 22pt;
+    font-weight: 600;
+    color: $text;
+}
+
+#DropWell {
+    background: $surface;
+    border: 2px dashed $drop_border;
+    border-radius: 14px;
+}
+
+#DropWell[hover="true"] {
+    background: $drop_hover_bg;
+    border-color: $accent;
+}
+
+#DropWellText {
+    color: $text_muted;
+    font-size: 10pt;
+}
+
+#DropWellText[hover="true"] {
+    color: $accent_ink;
+    font-weight: 500;
+}
+
+#DropWellFile {
+    color: $text;
+    font-size: 10pt;
+    font-weight: 600;
 }
 
 /* ------------------------------------------------------------------ dialogs */
 
 QLineEdit, QComboBox, QSpinBox, QTimeEdit {
     border: 1px solid $border;
-    border-radius: 6px;
-    padding: 6px 8px;
+    border-radius: 8px;
+    padding: 7px 10px;
     background: $surface;
     color: $text;
     selection-background-color: $accent;
@@ -288,31 +412,91 @@ QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QTimeEdit:focus {
 
 QComboBox::drop-down {
     border: none;
+    width: 26px;
+}
+
+/* Styling any part of a sub-control stops Qt drawing the native one, so the arrows have to be
+ * supplied. They are painted per theme by core/theme.chevron_icon, like the checkbox tick. */
+QComboBox::down-arrow {
+    image: $chevron_down;
+    width: 14px;
+    height: 9px;
+}
+
+QSpinBox::up-button, QTimeEdit::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
     width: 22px;
+    border: none;
+    background: transparent;
+}
+
+QSpinBox::down-button, QTimeEdit::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 22px;
+    border: none;
+    background: transparent;
+}
+
+QSpinBox::up-arrow, QTimeEdit::up-arrow {
+    image: $chevron_up;
+    width: 14px;
+    height: 9px;
+}
+
+QSpinBox::down-arrow, QTimeEdit::down-arrow {
+    image: $chevron_down;
+    width: 14px;
+    height: 9px;
 }
 
 QComboBox QAbstractItemView {
     background: $surface;
     color: $text;
     border: 1px solid $border;
+    border-radius: 8px;
+    padding: 4px;
     selection-background-color: $accent_soft;
-    selection-color: $text;
+    selection-color: $accent_ink;
 }
 
+/* A grouped list: one recessed, rounded container whose rows are told apart by space and a tinted
+ * selection rather than by a rule drawn around each of them. */
 QListWidget {
-    border: 1px solid $border;
-    border-radius: 6px;
+    background: $sunken;
+    border: none;
+    border-radius: 10px;
     padding: 4px;
 }
 
 QListWidget::item {
-    padding: 7px 8px;
-    border-radius: 4px;
+    padding: 9px 10px;
+    border-radius: 7px;
+    color: $text;
+}
+
+QListWidget::item:hover {
+    background: $chip_bg;
 }
 
 QListWidget::item:selected {
     background: $accent_soft;
-    color: $accent;
+    color: $accent_ink;
+}
+
+/* A section of a settings-style form: the same recessed container, filled from Python. */
+#GroupBox {
+    background: $sunken;
+    border: none;
+    border-radius: 10px;
+}
+
+#Separator {
+    background: $border_soft;
+    border: none;
+    max-height: 1px;
+    min-height: 1px;
 }
 
 /* Indicators must be styled for EVERY state once any rule touches the widget: as soon as a
@@ -321,12 +505,14 @@ QListWidget::item:selected {
  * with no indicator at all -- the selected option looked like plain text. */
 
 QCheckBox {
-    spacing: 8px;
+    spacing: 10px;
+    background: transparent;
 }
 
 QRadioButton {
-    spacing: 8px;
-    padding: 2px 0;
+    spacing: 10px;
+    padding: 3px 0;
+    background: transparent;
 }
 
 QCheckBox::indicator, QRadioButton::indicator {
@@ -337,7 +523,7 @@ QCheckBox::indicator, QRadioButton::indicator {
 }
 
 QCheckBox::indicator {
-    border-radius: 4px;
+    border-radius: 5px;
 }
 
 QRadioButton::indicator {
@@ -371,61 +557,58 @@ QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
     background: $sunken;
 }
 
+/* Popup menus keep square outer corners: a rounded QMenu shows the desktop through its corners on
+ * Windows unless the popup is made translucent, which costs more than the curve is worth. */
 QMenu {
     background: $surface;
     border: 1px solid $border;
-    padding: 4px;
+    padding: 5px;
 }
 
 QMenu::item {
-    padding: 6px 22px 6px 14px;
-    border-radius: 4px;
+    padding: 7px 24px 7px 14px;
+    border-radius: 7px;
 }
 
 QMenu::item:selected {
     background: $accent_soft;
-    color: $accent;
+    color: $accent_ink;
 }
 
 QMenu::separator {
     height: 1px;
     background: $border_soft;
-    margin: 4px 8px;
+    margin: 5px 8px;
 }
 
 #FormHint {
     color: $text_muted;
-    font-size: 8.5pt;
+    font-size: 9pt;
 }
 
 #SectionLabel {
     font-weight: 600;
-    color: $text;
-    padding-top: 6px;
+    font-size: 9pt;
+    color: $text_muted;
+    padding-top: 8px;
 }
 
 #EmptyState {
-    color: $text_faint;
-    font-size: 11pt;
-}
-
-#StatusBar {
-    background: $surface;
-    border-top: 1px solid $border_soft;
     color: $text_muted;
-    font-size: 8.5pt;
+    font-size: 10pt;
 }
 
 QScrollBar:vertical {
     background: transparent;
-    width: 10px;
+    width: 12px;
     margin: 0;
 }
 
 QScrollBar::handle:vertical {
     background: $scroll;
-    border-radius: 5px;
-    min-height: 30px;
+    border-radius: 4px;
+    min-height: 32px;
+    margin: 2px 4px 2px 4px;
 }
 
 QScrollBar::handle:vertical:hover {
@@ -434,23 +617,33 @@ QScrollBar::handle:vertical:hover {
 
 QScrollBar::add-line, QScrollBar::sub-line {
     height: 0;
+    width: 0;
+}
+
+QScrollBar::add-page, QScrollBar::sub-page {
+    background: transparent;
 }
 
 QScrollBar:horizontal {
     background: transparent;
-    height: 10px;
+    height: 12px;
 }
 
 QScrollBar::handle:horizontal {
     background: $scroll;
-    border-radius: 5px;
-    min-width: 30px;
+    border-radius: 4px;
+    min-width: 32px;
+    margin: 4px 2px 4px 2px;
+}
+
+QScrollBar::handle:horizontal:hover {
+    background: $scroll_hover;
 }
 
 QToolTip {
     background: $tooltip_bg;
     color: $tooltip_fg;
     border: none;
-    padding: 5px 8px;
-    border-radius: 4px;
+    padding: 6px 9px;
+    border-radius: 7px;
 }

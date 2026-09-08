@@ -1,12 +1,13 @@
 """The calendar surface: day columns by hourly rows.
 
-Rows are **hours**, 08:00 to 23:00, and a class is positioned by its real start and end rather
+Rows are **hours**, 08:00 to 18:00, and a class is positioned by its real start and end rather
 than dropped into a slot. A 09:30-10:50 pair therefore covers the bottom half of the 09:00 row and
 most of the 10:00 one, exactly as it would in a calendar. The old slot table gave every class a
 whole cell whatever its time, which is what made the times down the side look arbitrary.
 
-The trick that keeps this simple: rows are a fixed 60 px, so **one minute is one pixel** and a
-card's offset inside its span is just its start minute. No fractional layout, no sub-rows.
+The trick that keeps this simple: every row is exactly ``HOUR_HEIGHT`` px, so a minute is a fixed
+number of pixels and a card's offset inside its span is just its start minute, scaled. No
+fractional layout, no sub-rows, no custom paint.
 
 Layout mirrors the source document -- Mon..Sat are always shown because that is the teaching week;
 Sunday appears only if a lesson actually lands on it (docs/FRONTEND.md).
@@ -36,17 +37,28 @@ from ..core.models import Lesson
 from ..importer.normalize import DAY_NAMES, DAY_SHORT
 from .class_card import LESSON_MIME, ClassCard
 
-# The visible day: 08:00 up to and including the 23:00 row, so a class can be created at any time
-# from 08:00 to 23:00.
+# The visible day: 08:00 up to and including the 18:00 row. The teaching day ends well before
+# that -- the latest class in the source document finishes at 17:30 -- and every hour past it was a
+# band of empty grid that the week had to scroll through. A class outside the window is not lost:
+# ``span_for`` clamps it to the last row, and the edit dialog takes any time at all.
 FIRST_HOUR = 8
-LAST_HOUR = 23
+LAST_HOUR = 18
 HOURS = list(range(FIRST_HOUR, LAST_HOUR + 1))
 
 DAY_START_MINUTES = FIRST_HOUR * 60
 DAY_END_MINUTES = (LAST_HOUR + 1) * 60
 
-# One minute per pixel. The placement maths below relies on that identity; change them together.
-HOUR_HEIGHT = 60
+# Every row is exactly this tall, and a minute is that divided by sixty. Sixty would be tidier --
+# a minute would be a pixel -- but it is not enough room: the standard 80-minute pair needs 87 px
+# to show its subject, teacher and time, and at 60 px an hour it would get 80. Eleven rows at 66
+# still fit the default window without scrolling, which is the whole reason the day now ends at
+# 18:00. The placement maths relies on rows being pinned to this exactly; change them together.
+HOUR_HEIGHT = 66
+
+
+def minutes_to_pixels(minutes: int) -> int:
+    """A duration in the grid's own units. Rounded once, here, so no caller carries a float."""
+    return round(minutes * HOUR_HEIGHT / 60)
 
 # Anything shorter is still drawn this tall, so a ten-minute entry stays readable and clickable.
 MIN_CARD_MINUTES = 26
@@ -308,11 +320,13 @@ class WeekGrid(QScrollArea):
 
     @staticmethod
     def span_for(start_time: str, end_time: str) -> tuple[int, int, int, int]:
-        """Where a class sits: ``(first_row, row_span, top_margin_px, bottom_margin_px)``.
+        """Where a class sits: ``(first_row, row_span, top_margin_min, bottom_margin_min)``.
 
-        Rows are 1-based to match the layout, whose row 0 is the header. Because a row is exactly
-        60 px, the margins are simply the minutes the class does not use at either end of the
-        hours it spans -- which is what lets a card cover half of one cell and half of the next.
+        Rows are 1-based to match the layout, whose row 0 is the header. The margins are the
+        **minutes** the class does not use at either end of the hours it spans -- which is what
+        lets a card cover half of one cell and half of the next. They are minutes rather than
+        pixels so this stays a pure function of the timetable; ``minutes_to_pixels`` turns them
+        into a margin at the one place that draws.
         """
         start = max(DAY_START_MINUTES, min(to_minutes(start_time), DAY_END_MINUTES - 1))
         end = min(DAY_END_MINUTES, max(to_minutes(end_time), start + MIN_CARD_MINUTES))
@@ -337,20 +351,27 @@ class WeekGrid(QScrollArea):
             column = self._days.index(lesson.day_index) + 1
             row, span, top, bottom = self.span_for(lesson.start_time, lesson.end_time)
 
+            top_px, bottom_px = minutes_to_pixels(top), minutes_to_pixels(bottom)
             card = ClassCard(
                 lesson,
                 status=statuses.get(lesson.id),
                 is_next=lesson.id == next_lesson_id,
+                height=span * HOUR_HEIGHT - top_px - bottom_px,
             )
             card.clicked.connect(self.lesson_clicked.emit)
             card.menu_requested.connect(self.lesson_menu_requested.emit)
             container = QWidget()
             box = QVBoxLayout(container)
-            box.setContentsMargins(4, top, 4, bottom)
+            box.setContentsMargins(4, top_px, 4, bottom_px)
             box.setSpacing(0)
             box.addWidget(card)
-            # The card must not be allowed to argue with the clock: an Ignored vertical policy
-            # stops a long subject name from stretching the hour it sits in.
+            # The card must not be allowed to argue with the clock. An Ignored vertical policy is
+            # not enough on its own: QGridLayout still honours a *spanning* item's
+            # minimumSizeHint, so a card whose text needed more room than its class lasts pushed
+            # the rows it covered apart -- 60 px hours quietly became 106 px ones, and every card
+            # below them drifted off the time it was supposed to sit on. A fixed height is the
+            # only answer the layout cannot argue with: the container is exactly as tall as the
+            # class is long, and text that does not fit is clipped, as it is in any calendar.
             container.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Ignored)
-            container.setMinimumHeight(0)
+            container.setFixedHeight(span * HOUR_HEIGHT)
             self._layout.addWidget(container, row, column, span, 1)

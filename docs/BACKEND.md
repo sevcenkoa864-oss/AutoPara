@@ -283,7 +283,7 @@ to the setting on every launch. Both installers write byte-identical strings; if
 `core/theme.py` renders `ui/styles.qss` — a `string.Template` whose colours are `$tokens` — against
 one of two palettes. `resolve()` turns the stored `system` setting into `light` or `dark` by
 reading `HKCU\...\Themes\Personalize\AppsUseLightTheme`, which is how a fresh install comes up
-matching the desktop it was installed on. The toolbar toggle pins the opposite of whatever is
+matching the desktop it was installed on. The sidebar toggle pins the opposite of whatever is
 showing.
 
 QSS is not CSS: it has no variables and no cascade worth the name, so a second stylesheet file is

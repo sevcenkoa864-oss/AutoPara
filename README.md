@@ -40,7 +40,8 @@ python -m pip install -r requirements.txt
 python -m autopara
 ```
 
-On first launch it asks for the `.docx`, then your course and group.
+On first launch it opens on the import screen: **drag the `.docx` onto it** (or press
+`Обрати файл…`), then pick your course and group.
 
 `python -m autopara` also **refreshes the installed copy** from the source it is running out of, so
 checking a change is one command rather than a reinstall. Add `--no-rebuild` to skip that.
@@ -76,7 +77,7 @@ imported timetable in `%APPDATA%\AutoPara` unless you choose to delete it. Build
 - **Editable straight away** — no edit mode. Click a class for its actions (open, edit, mark as
   opened or skipped, delete), click an empty slot to create one there, drag a class to move it.
   A class with no link offers to add one instead of opening.
-- **A real calendar day**, 08:00 to 23:00 in hourly rows, with each class drawn across the time it
+- **A real calendar day**, 08:00 to 18:00 in hourly rows, with each class drawn across the time it
   actually occupies rather than dropped into a slot. Columns are weekdays; the timetable repeats
   every week, so there are no dates and nothing to navigate.
 - **Light and dark themes**, following the Windows app theme until you pin one.
@@ -94,6 +95,12 @@ Closing the window hides it to the tray; use the tray menu to quit.
 ## Author
 
 Authorised by MaBoRo (Vladyslav Tishyn) — vlad.tishyn@gmail.com
+
+## Third-party
+
+The interface is set in **Google Sans**, bundled in `autopara/ui/fonts` under the SIL Open Font
+License 1.1 — the licence ships beside the font files as `OFL.txt`. Nothing else is bundled: every
+icon in the app, the app mark included, is drawn in code.
 
 ## Documentation
 

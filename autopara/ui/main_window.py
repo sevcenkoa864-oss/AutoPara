@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -41,11 +41,18 @@ from ..importer.normalize import (
     pair_slot,
     week_start,
 )
+from . import icons
 from .catchup_banner import CatchupBanner
 from .edit_dialog import EditDialog
+from .import_landing import ImportLanding
 from .settings_dialog import SettingsDialog
 from .setup_dialog import SetupDialog
+from .tray import icon_pixmap
 from .week_grid import WeekGrid
+
+
+# A rail, not a panel: with no text on it, its width is the width of one button plus air.
+SIDEBAR_WIDTH = 72
 
 
 class MainWindow(QMainWindow):
@@ -58,22 +65,27 @@ class MainWindow(QMainWindow):
         self.storage = storage
         self.scheduler = scheduler
         self.setWindowTitle("AutoPara — автозапуск пар")
-        self.resize(1160, 780)
+        # Wide enough that the sidebar does not cost the grid a day column.
+        self.resize(1240, 800)
         self._build()
 
         self.scheduler.lesson_opened.connect(self._lesson_opened)
         self.scheduler.lesson_missed.connect(lambda _: self.reload())
-        self.scheduler.tick_completed.connect(self._refresh_status)
 
     # ------------------------------------------------------------------ build
 
     def _build(self) -> None:
         central = QWidget()
-        layout = QVBoxLayout(central)
+        columns = QHBoxLayout(central)
+        columns.setContentsMargins(0, 0, 0, 0)
+        columns.setSpacing(0)
+
+        columns.addWidget(self._build_sidebar())
+
+        content = QWidget()
+        layout = QVBoxLayout(content)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        layout.addWidget(self._build_toolbar())
 
         self.banner = CatchupBanner()
         self.banner.connect_requested.connect(self._catchup_connect)
@@ -87,56 +99,78 @@ class MainWindow(QMainWindow):
         self.grid.lesson_dropped.connect(self._lesson_dropped)
         layout.addWidget(self.grid, 1)
 
-        self.empty_label = QLabel("Розкладу ще немає — імпортуйте файл .docx, щоб почати.")
-        self.empty_label.setObjectName("EmptyState")
-        self.empty_label.setAlignment(Qt.AlignCenter)
-        self.empty_label.hide()
-        layout.addWidget(self.empty_label, 1)
+        self.landing = ImportLanding()
+        self.landing.file_dropped.connect(lambda path: self.open_import(path))
+        self.landing.browse_requested.connect(self.open_import)
+        self.landing.hide()
+        layout.addWidget(self.landing, 1)
+        # Решта вікна зверталася просто до порожнього напису; він і далі тут, усередині екрана
+        # імпорту, тож ніщо навколо не мусить знати, що він переїхав.
+        self.empty_label = self.landing.empty_label
 
-        self.status = QLabel("")
-        self.status.setObjectName("StatusBar")
-        self.status.setContentsMargins(16, 7, 16, 7)
-        layout.addWidget(self.status)
-
+        columns.addWidget(content, 1)
         self.setCentralWidget(central)
+        # Після бічної панелі та екрана імпорту: значки малюються в кольорі теми, для обох одразу.
+        self._refresh_icons()
 
-    def _build_toolbar(self) -> QWidget:
+    def _build_sidebar(self) -> QWidget:
+        """Дії живуть у вузькій колонці ліворуч, а не в смузі згори.
+
+        Сітка тижня -- широка й невисока, тож горизонтальна панель забирала саме ту висоту, якої
+        календарю бракує. У колонці немає жодного слова: сам застосунок не мусить називати себе у
+        власному вікні, а що робить кожна кнопка -- каже підказка під курсором.
+        """
         bar = QFrame()
-        bar.setObjectName("Toolbar")
-        row = QHBoxLayout(bar)
-        row.setContentsMargins(16, 12, 16, 12)
-        row.setSpacing(8)
+        bar.setObjectName("Sidebar")
+        bar.setFixedWidth(SIDEBAR_WIDTH)
+        column = QVBoxLayout(bar)
+        column.setContentsMargins(0, 18, 0, 18)
+        column.setSpacing(12)
 
-        titles = QVBoxLayout()
-        titles.setSpacing(0)
-        self.title_label = QLabel("AutoPara")
-        self.title_label.setObjectName("TitleLabel")
-        self.subtitle_label = QLabel("")
-        self.subtitle_label.setObjectName("SubtitleLabel")
-        titles.addWidget(self.title_label)
-        titles.addWidget(self.subtitle_label)
-        row.addLayout(titles)
-        row.addStretch(1)
+        # Значок замість слова «AutoPara». Обраний курс і група більше не написані на панелі --
+        # вони не змінюються тижнями, а місце займали постійно; тепер це підказка на значку.
+        self.brand = QLabel()
+        self.brand.setObjectName("Brand")
+        self.brand.setPixmap(icon_pixmap(30))
+        self.brand.setAlignment(Qt.AlignCenter)
+        column.addWidget(self.brand, 0, Qt.AlignHCenter)
 
-        self.add_button = QPushButton("Додати пару")
-        self.add_button.clicked.connect(lambda: self._edit_lesson(None))
-        row.addWidget(self.add_button)
+        column.addStretch(1)
 
-        import_button = QPushButton("Імпорт…")
-        import_button.clicked.connect(self.open_import)
-        row.addWidget(import_button)
+        self.add_button = self._icon_button("Додати пару", lambda: self._edit_lesson(None))
+        self.add_button.setObjectName("PrimaryRound")
+        self.add_button.setFixedSize(40, 40)
+        column.addWidget(self.add_button, 0, Qt.AlignHCenter)
 
-        settings_button = QPushButton("Налаштування")
-        settings_button.clicked.connect(self.open_settings)
-        row.addWidget(settings_button)
+        # Три значки стоять щільно, щоб читалися однією групою дрібних дій, а не трьома
+        # знаками, що розбрелися під кнопкою над ними.
+        cluster = QVBoxLayout()
+        cluster.setSpacing(2)
+        self.import_button = self._icon_button("Імпортувати розклад…", self.open_import)
+        cluster.addWidget(self.import_button, 0, Qt.AlignHCenter)
 
-        self.theme_button = QPushButton("")
-        self.theme_button.setObjectName("IconButton")
-        self.theme_button.clicked.connect(self.toggle_theme)
-        row.addWidget(self.theme_button)
-        self._refresh_theme_button()
+        self.settings_button = self._icon_button("Налаштування", self.open_settings)
+        cluster.addWidget(self.settings_button, 0, Qt.AlignHCenter)
+
+        self.theme_button = self._icon_button("", self.toggle_theme)
+        cluster.addWidget(self.theme_button, 0, Qt.AlignHCenter)
+        column.addLayout(cluster)
 
         return bar
+
+    def _icon_button(self, tooltip: str, handler) -> QPushButton:
+        """Кнопка-значок 36x36 -- зручна для миші й не перетворює панель на суцільні кнопки.
+
+        Текст лишається порожнім назавжди: значок ставить ``_refresh_icons`` після кожної зміни
+        теми, бо значки малюються кодом і мають перефарбовуватися разом із нею.
+        """
+        button = QPushButton("")
+        button.setObjectName("IconButton")
+        button.setFixedSize(36, 36)
+        button.setIconSize(QSize(20, 20))
+        button.setToolTip(tooltip)
+        button.clicked.connect(handler)
+        return button
 
     # ------------------------------------------------------------------- week
 
@@ -179,19 +213,20 @@ class MainWindow(QMainWindow):
 
         if group is None:
             self.grid.hide()
-            self.empty_label.setText("Розкладу ще немає — імпортуйте файл .docx, щоб почати.")
-            self.empty_label.show()
-            self.subtitle_label.setText("")
+            self.landing.show_no_schedule()
+            self.landing.show()
+            self.brand.setToolTip("Розклад ще не імпортовано")
         elif not lessons:
             self.grid.hide()
-            self.empty_label.setText(
-                f"У групі {group.name} немає пар в імпортованому розкладі.\n"
-                "Натисніть «Додати пару» або клацніть порожню клітинку сітки."
+            self.landing.set_state(
+                "Тут поки порожньо",
+                f"У групі {group.name} немає пар в імпортованому розкладі. "
+                "Натисніть «Додати пару» або імпортуйте інший файл.",
             )
-            self.empty_label.show()
+            self.landing.show()
             self._set_subtitle(group)
         else:
-            self.empty_label.hide()
+            self.landing.hide()
             self.grid.show()
             statuses = self.week_statuses(lessons)
             self.grid.render_week(
@@ -201,9 +236,13 @@ class MainWindow(QMainWindow):
                 today=date.today(),
             )
             self._set_subtitle(group)
-        self._refresh_status()
 
     def _set_subtitle(self, group) -> None:
+        """Курс, група і час відкриття -- підказка на значку, а не напис на панелі.
+
+        Ці чотири рядки не змінюються тижнями, але місце на екрані займали постійно. Підказка
+        показує їх тоді, коли про них справді питають.
+        """
         settings = self.storage.settings()
         course = self.storage.course(group.course_id)
         parts = [group.name]
@@ -212,7 +251,7 @@ class MainWindow(QMainWindow):
         if course:
             parts.insert(0, course.name)
         parts.append(f"відкриття за {settings.lead_minutes} хв")
-        self.subtitle_label.setText("  ·  ".join(parts))
+        self.brand.setToolTip("\n".join(parts))
 
     def _next_lesson_id(self, lessons: list[Lesson], statuses: dict[int, str]) -> int | None:
         now = datetime.now()
@@ -228,52 +267,27 @@ class MainWindow(QMainWindow):
             return None
         return min(upcoming, key=lambda lesson: lesson.start_time).id
 
-    def _refresh_status(self) -> None:
-        lessons = self.current_lessons()
-        if not lessons:
-            self.status.setText("Готово")
-            return
-        now = datetime.now()
-        today = now.date()
-        statuses = self.storage.occurrences_on(today)
-        todays = [lesson for lesson in lessons if lesson.day_index == today.weekday()]
-        upcoming = sorted(
-            (
-                lesson
-                for lesson in todays
-                if lesson.starts_on(today) > now and lesson.id not in statuses
-            ),
-            key=lambda lesson: lesson.start_time,
-        )
-        opened = sum(1 for lesson in todays if lesson.id in statuses)
-        if upcoming:
-            nxt = upcoming[0]
-            minutes = int((nxt.starts_on(today) - now).total_seconds() // 60)
-            when = f"через {minutes} хв" if minutes < 90 else f"о {nxt.start_time}"
-            self.status.setText(
-                f"Наступна: {nxt.subject} {when}   ·   опрацьовано {opened}/{len(todays)} сьогодні"
-            )
-        elif todays:
-            self.status.setText(
-                f"Сьогодні пар більше немає   ·   опрацьовано {opened}/{len(todays)}"
-            )
-        else:
-            self.status.setText("Сьогодні пар немає")
-
     # ------------------------------------------------------------------ theme
 
-    def _refresh_theme_button(self) -> None:
+    def _refresh_icons(self) -> None:
+        """Перемальовує значки в кольорі активної теми. Підписів на цих кнопках немає."""
         dark = theme.is_dark()
-        self.theme_button.setText("☀" if dark else "🌙")
+        ink = theme.token("text")
+        self.add_button.setIcon(icons.icon("add", theme.token("accent_text"), 22))
+        self.import_button.setIcon(icons.icon("import", ink, 20))
+        self.settings_button.setIcon(icons.icon("settings", ink, 20))
+        self.theme_button.setIcon(icons.icon("sun" if dark else "moon", ink, 20))
         self.theme_button.setToolTip(
             "Перемкнути на світлу тему" if dark else "Перемкнути на темну тему"
         )
+        self.landing.repaint_glyphs()
+        self.banner.repaint_glyph()
 
     def apply_theme(self) -> None:
         app = QApplication.instance()
         if app is not None:
             theme.apply(app, self.storage.settings().theme)
-        self._refresh_theme_button()
+        self._refresh_icons()
         self.reload()
 
     def toggle_theme(self) -> None:
@@ -441,8 +455,9 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             self.reload()
 
-    def open_import(self) -> None:
-        dialog = SetupDialog(self.storage, self)
+    def open_import(self, path: str | None = None) -> None:
+        """``path`` -- файл, який щойно кинули на екран імпорту; діалог одразу його читає."""
+        dialog = SetupDialog(self.storage, self, path=path)
         if dialog.exec():
             self.reload()
 

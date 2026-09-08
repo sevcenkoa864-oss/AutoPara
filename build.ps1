@@ -15,6 +15,15 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 if (-not $SkipApp) {
+    # The .ico is generated from the same drawing as the tray and window icons, in its own
+    # process so a Qt session never shares the build with PyInstaller. Without it the executable
+    # -- and every shortcut pointing at it -- carries PyInstaller's stock Python icon.
+    Write-Host "==> Rendering the application icon" -ForegroundColor Cyan
+    $env:QT_QPA_PLATFORM = "offscreen"
+    python -c "from PySide6.QtGui import QGuiApplication; from autopara.ui.tray import write_ico; QGuiApplication([]); print(write_ico('build/AutoPara.ico'))"
+    if ($LASTEXITCODE -ne 0) { throw "could not render build\AutoPara.ico" }
+    Remove-Item Env:\QT_QPA_PLATFORM
+
     Write-Host "==> Building application bundle (PyInstaller)" -ForegroundColor Cyan
     python -m PyInstaller AutoPara.spec --noconfirm
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller failed" }

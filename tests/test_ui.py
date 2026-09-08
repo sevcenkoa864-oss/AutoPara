@@ -10,12 +10,13 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from datetime import date, timedelta  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 import pytest  # noqa: E402
 
 pytest.importorskip("PySide6.QtWidgets")
 
-from PySide6.QtCore import QEvent  # noqa: E402
+from PySide6.QtCore import QEvent, Qt  # noqa: E402
 
 from autopara.core import theme  # noqa: E402
 from autopara.core.models import (  # noqa: E402
@@ -29,9 +30,17 @@ from autopara.core.models import (  # noqa: E402
 from autopara.core.scheduler import Scheduler  # noqa: E402
 from autopara.core.storage import Storage  # noqa: E402
 from autopara.importer.normalize import minutes_between, week_start  # noqa: E402
+from autopara.ui import icons  # noqa: E402
 from autopara.ui.catchup_banner import CatchupBanner  # noqa: E402
 from autopara.ui.class_card import LESSON_MIME, ClassCard, groups_word, subject_color  # noqa: E402
-from autopara.ui.week_grid import HOURS, GridCell, WeekGrid  # noqa: E402
+from autopara.ui.import_landing import ImportLanding  # noqa: E402
+from autopara.ui.week_grid import (  # noqa: E402
+    HEADER_HEIGHT,
+    HOUR_HEIGHT,
+    HOURS,
+    GridCell,
+    WeekGrid,
+)
 
 
 def _mouse(kind, button):
@@ -167,8 +176,8 @@ class TestWeekGrid:
         assert "ПН" in names
         assert not any(re.fullmatch(r"\d{2}\.\d{2}", name) for name in names)
 
-    def test_rows_cover_the_whole_teaching_day(self, seeded, gui_app):
-        """An hourly row for every hour from 08:00 to 23:00."""
+    def test_rows_cover_the_teaching_day_and_stop(self, seeded, gui_app):
+        """An hourly row for every hour from 08:00 to 18:00, and none after it."""
         from PySide6.QtWidgets import QLabel
 
         storage, group = seeded
@@ -181,12 +190,19 @@ class TestWeekGrid:
             if label.objectName() == "HourLabel"
         ]
         assert hours[0] == "08:00"
-        assert hours[-1] == "23:00"
-        assert len(hours) == 16
+        assert hours[-1] == "18:00"
+        assert len(hours) == 11
+
+    def test_a_class_past_the_last_row_is_still_drawn(self, seeded, gui_app):
+        """Обрізана сітка не мусить ховати пару, яку хтось поставив на вечір."""
+        row, span, _, _ = WeekGrid.span_for("20:00", "21:20")
+        assert row + span - 1 <= len(HOURS), "a late class is clamped, never dropped"
+        assert span >= 1
 
     def test_a_class_straddles_the_hours_it_actually_covers(self):
         """09:30-10:50 is half of the 09:00 cell and most of the 10:00 one."""
-        # (first row, row span, top margin px, bottom margin px); a row is 60 px, a minute 1 px.
+        # (first row, row span, top margin, bottom margin) -- the margins are in *minutes*, which
+        # is what keeps span_for a pure function; minutes_to_pixels scales them where it draws.
         assert WeekGrid.span_for("09:30", "10:50") == (2, 2, 30, 10)
         assert WeekGrid.span_for("08:00", "09:20") == (1, 2, 0, 40)
         assert WeekGrid.span_for("13:00", "14:00") == (6, 1, 0, 1)
@@ -250,6 +266,72 @@ class TestWeekGrid:
         centre = target.geometry().center()
         grid._canvas.dropEvent(_Drop(QPoint(centre.x(), centre.y()), data))
         assert moves == [(42, 2, "11:00")]
+
+
+class TestGridIsHonestAboutTime:
+    """Годину не можна розтягнути: інакше картка стоїть не на своєму часі."""
+
+    def _laid_out(self, storage, group, gui_app, height=800):
+        grid = WeekGrid()
+        grid.render_week(storage.lessons_for_group(group.id))
+        grid.resize(1160, height)
+        grid.show()
+        gui_app.processEvents()
+        return grid
+
+    def test_every_row_is_exactly_one_hour(self, seeded, gui_app):
+        """A card whose text wanted more room than its class lasted used to push its rows apart.
+
+        An Ignored vertical size policy does not stop that on its own -- QGridLayout still honours
+        a spanning item's minimumSizeHint -- so hours became 74, 82, even 106 px tall and every
+        card below them sat at the wrong time.
+        """
+        storage, group = seeded
+        grid = self._laid_out(storage, group, gui_app)
+
+        heights = {
+            cell.geometry().height()
+            for cell in grid.findChildren(GridCell)
+            if cell.parent() is not None
+        }
+        assert heights == {HOUR_HEIGHT}, f"rows must all be one hour tall, got {sorted(heights)}"
+
+    def test_a_taller_window_does_not_stretch_the_hours(self, seeded, gui_app):
+        """Spare height belongs to the trailing row, not shared out between the hours."""
+        storage, group = seeded
+        grid = self._laid_out(storage, group, gui_app, height=1400)
+
+        heights = {
+            cell.geometry().height()
+            for cell in grid.findChildren(GridCell)
+            if cell.parent() is not None
+        }
+        assert heights == {HOUR_HEIGHT}
+
+    def test_a_card_is_as_tall_as_its_class_is_long(self, seeded, gui_app):
+        """Дві години пари -- дві години сітки, скільки б тексту в ній не було."""
+        storage, group = seeded
+        grid = self._laid_out(storage, group, gui_app)
+
+        for card in grid.findChildren(ClassCard):
+            _, span, _, _ = WeekGrid.span_for(card.lesson.start_time, card.lesson.end_time)
+            assert card.parentWidget().height() == span * HOUR_HEIGHT
+
+    def test_the_whole_teaching_day_fits_the_default_window(self, seeded, gui_app):
+        """Скоротити день до 18:00 мало сенс лише тоді, коли він більше не прокручується."""
+        assert HEADER_HEIGHT + len(HOURS) * HOUR_HEIGHT <= 800
+
+    def test_a_clipped_card_still_tells_the_whole_story(self, seeded, gui_app):
+        """Текст обрізається, як у будь-якому календарі -- тож підказка має його весь."""
+        storage, group = seeded
+        lesson = max(
+            storage.lessons_for_group(group.id), key=lambda lesson: len(lesson.subject)
+        )
+        card = ClassCard(lesson)
+        assert lesson.subject in card.toolTip()
+        assert f"{lesson.start_time}–{lesson.end_time}" in card.toolTip()
+        if lesson.teacher:
+            assert lesson.teacher.strip("()") in card.toolTip()
 
 
 class TestClassCard:
@@ -509,7 +591,7 @@ class TestMainWindow:
         window = MainWindow(storage, Scheduler(storage))
         window.reload()
 
-        assert group.name in window.subtitle_label.text()
+        assert group.name in window.brand.toolTip()
         assert window.grid.isVisibleTo(window)
         assert len(window.current_lessons()) == len(storage.lessons_for_group(group.id))
 
@@ -594,22 +676,49 @@ class TestMainWindow:
         assert "імпортуйте" in window.empty_label.text().lower()
         storage.close()
 
-    def test_status_line_counts_todays_classes(self, seeded, gui_app):
+    def test_there_is_no_status_bar(self, seeded, gui_app):
+        """Нижня смуга пішла: те саме про наступну пару каже сама сітка."""
+        from autopara.ui.main_window import MainWindow
+
+        storage, _ = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        window.reload()
+
+        assert not hasattr(window, "status")
+        assert not hasattr(window, "_refresh_status")
+
+    def test_the_sidebar_carries_no_words_at_all(self, seeded, gui_app):
+        """Вузька панель -- це значки й підказки, без жодного напису."""
+        from PySide6.QtWidgets import QLabel, QPushButton
+
         from autopara.ui.main_window import MainWindow
 
         storage, group = seeded
         window = MainWindow(storage, Scheduler(storage))
         window.reload()
-        text = window.status.text()
-        todays = [
-            l
-            for l in storage.lessons_for_group(group.id)
-            if l.day_index == date.today().weekday()
+
+        assert not hasattr(window, "title_label")
+        assert not hasattr(window, "subtitle_label")
+        assert not window.brand.pixmap().isNull()
+
+        sidebar = window.brand.parentWidget()
+        written = [
+            widget.text()
+            for widget in sidebar.findChildren(QLabel) + sidebar.findChildren(QPushButton)
+            if widget.text()
         ]
-        if todays:
-            assert "опрацьовано" in text
-        else:
-            assert text == "Сьогодні пар немає"
+        assert written == [], f"на панелі не має бути тексту, а є {written}"
+
+    def test_the_group_moved_into_the_marks_tooltip(self, seeded, gui_app):
+        """Курс і група нікуди не зникли -- вони під курсором, а не поперек панелі."""
+        from autopara.ui.main_window import MainWindow
+
+        storage, group = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        window.reload()
+
+        assert group.name in window.brand.toolTip()
+        assert "\n" in window.brand.toolTip(), "по факту на рядок"
 
     def test_interface_is_ukrainian(self, seeded, gui_app):
         """The whole interface is Ukrainian -- no English left in the chrome."""
@@ -630,3 +739,205 @@ class TestMainWindow:
                     latin_words.add(stripped)
         # AutoPara is the product name; Zoom/Meet are the providers' own names.
         assert latin_words <= {"AutoPara", "Zoom", "Meet", "docx"}
+
+
+class TestImportLanding:
+    """Перший екран: сюди кидають .docx, і лише .docx."""
+
+    def _drop(self, *names):
+        """A QDropEvent does not own its QMimeData, and PySide will not keep it alive for us.
+
+        Letting the mime data fall out of scope leaves ``event.mimeData()`` pointing at freed
+        memory -- which comes back as a bare QObject and, if pytest ever tries to print it,
+        takes the interpreter down with it. So every mime object made here is kept for the
+        length of the test.
+        """
+        from PySide6.QtCore import QMimeData, QPoint, QUrl
+        from PySide6.QtGui import QDropEvent
+
+        mime = QMimeData()
+        mime.setUrls([QUrl.fromLocalFile(name) for name in names])
+        self._alive = getattr(self, "_alive", [])
+        self._alive.append(mime)
+        return QDropEvent(
+            QPoint(10, 10), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier, QEvent.Drop
+        )
+
+    def test_a_docx_drop_is_reported(self, gui_app):
+        landing = ImportLanding()
+        dropped: list[str] = []
+        landing.file_dropped.connect(dropped.append)
+
+        landing.dropEvent(self._drop(r"C:\schedules\week.docx"))
+        assert [Path(path).name for path in dropped] == ["week.docx"]
+
+    def test_a_drop_may_land_anywhere_on_the_screen(self, gui_app):
+        """Ціль -- увесь екран, а не тільки прямокутник поля."""
+        landing = ImportLanding()
+        dropped: list[str] = []
+        landing.file_dropped.connect(dropped.append)
+
+        landing.well.dropEvent(self._drop(r"C:\a.docx"))
+        landing.dropEvent(self._drop(r"C:\b.docx"))
+        assert [Path(path).name for path in dropped] == ["a.docx", "b.docx"]
+
+    def test_anything_but_a_docx_is_refused(self, gui_app):
+        landing = ImportLanding()
+        dropped: list[str] = []
+        landing.file_dropped.connect(dropped.append)
+
+        event = self._drop(r"C:\schedule.pdf")
+        event.setAccepted(False)
+        landing.dragEnterEvent(event)
+        assert not landing.well.property("hover"), "the well must not offer to take a .pdf"
+        assert not event.isAccepted(), "an unaccepted drag is what shows the 'no' cursor"
+
+        landing.dropEvent(event)
+        assert dropped == []
+
+    def test_the_first_docx_of_a_multiple_drop_wins(self, gui_app):
+        """Кинути кілька файлів -- не помилка, по якій варто відкривати діалог."""
+        landing = ImportLanding()
+        dropped: list[str] = []
+        landing.file_dropped.connect(dropped.append)
+
+        landing.dropEvent(self._drop(r"C:\notes.txt", r"C:\week.docx"))
+        assert [Path(path).name for path in dropped] == ["week.docx"]
+
+    def test_hovering_marks_the_well_and_lets_go_again(self, gui_app):
+        landing = ImportLanding()
+        event = self._drop(r"C:\week.docx")
+
+        landing.dragEnterEvent(event)
+        assert landing.well.property("hover") is True
+        landing.dragLeaveEvent(event)
+        assert landing.well.property("hover") is False
+
+    def test_the_landing_still_exposes_the_empty_label(self, seeded, gui_app):
+        """Порожній стан переїхав усередину екрана імпорту, але лишився тим самим віджетом."""
+        from autopara.ui.main_window import MainWindow
+
+        storage, _ = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        assert window.empty_label is window.landing.empty_label
+
+    def test_the_chosen_file_is_shown_by_name(self, gui_app):
+        landing = ImportLanding()
+        landing.well.show_file(r"C:\Users\me\Downloads\Робочий_розклад.docx")
+        assert landing.well.filename.text() == "Робочий_розклад.docx"
+        assert "C:" not in landing.well.filename.text(), "шлях -- не те, що тут перевіряють"
+
+
+class TestIcons:
+    def test_every_glyph_paints_something(self, gui_app):
+        """Один друк у таблиці малювальників -- і кнопка лишилася б порожньою."""
+        for name in icons.NAMES:
+            pixmap = icons.pixmap(name, "#007aff", 20)
+            assert not pixmap.isNull()
+            image = pixmap.toImage()
+            painted = sum(
+                1
+                for x in range(image.width())
+                for y in range(image.height())
+                if image.pixelColor(x, y).alpha() > 0
+            )
+            assert painted > 20, f"{name} намалював майже нічого"
+
+    def test_a_glyph_takes_the_colour_it_is_given(self, gui_app):
+        light = icons.pixmap("settings", "#ffffff", 20).toImage()
+        dark = icons.pixmap("settings", "#000000", 20).toImage()
+        assert light != dark
+
+
+class TestIconOnlyToolbar:
+    """Кнопки-значки бічної панелі."""
+
+    def test_import_and_settings_carry_an_icon_and_a_tooltip_but_no_text(self, seeded, gui_app):
+        """Значок без підпису читається лише разом з підказкою -- вона обов'язкова."""
+        from autopara.ui.main_window import MainWindow
+
+        storage, _ = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        buttons = (
+            window.add_button,
+            window.import_button,
+            window.settings_button,
+            window.theme_button,
+        )
+        for button in buttons:
+            assert button.text() == ""
+            assert not button.icon().isNull()
+            assert button.toolTip()
+
+    def test_the_theme_toggle_swaps_its_glyph(self, seeded, gui_app):
+        from autopara.ui.main_window import MainWindow
+
+        storage, _ = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        theme.apply(gui_app, THEME_LIGHT)
+        window._refresh_icons()
+        moon = window.theme_button.icon().pixmap(20, 20).toImage()
+        theme.apply(gui_app, THEME_DARK)
+        window._refresh_icons()
+        sun = window.theme_button.icon().pixmap(20, 20).toImage()
+        theme.apply(gui_app, THEME_LIGHT)
+        assert moon != sun
+
+
+class TestInterfaceFont:
+    def test_the_resolved_family_is_one_qt_actually_has(self, gui_app):
+        """QSS шанує лише перше сімейство зі списку, тож вибір робиться в Python."""
+        from PySide6.QtGui import QFontDatabase
+
+        family = theme.interface_font()
+        assert family in theme.FONT_STACK
+        assert family in QFontDatabase.families() or family == theme.FONT_STACK[-1]
+
+    def test_the_stylesheet_names_exactly_one_family(self):
+        rendered = theme.stylesheet(THEME_LIGHT)
+        line = next(l for l in rendered.splitlines() if l.strip().startswith("font-family"))
+        assert line.count(",") == 0, "a QSS fallback list would silently resolve to no font at all"
+
+    def test_the_bundled_faces_are_present(self):
+        """Google Sans їде разом із застосунком: без нього інсталяція виглядала б інакше."""
+        fonts = Path(theme.__file__).resolve().parents[1] / "ui" / "fonts"
+        names = {path.name for path in fonts.glob("*.ttf")}
+        assert names == {
+            "GoogleSans-Regular.ttf",
+            "GoogleSans-Medium.ttf",
+            "GoogleSans-SemiBold.ttf",
+            "GoogleSans-Bold.ttf",
+        }
+        assert (fonts / "OFL.txt").is_file(), "the licence must ship with the font"
+
+    def test_the_bundled_family_covers_the_interface(self, gui_app):
+        """Кирилиця й напівжирний -- саме те, чим набраний інтерфейс."""
+        from PySide6.QtGui import QFontDatabase
+
+        from autopara.app import _load_fonts
+
+        _load_fonts()
+        assert theme.interface_font() == "Google Sans"
+        assert {"Regular", "Medium", "SemiBold", "Bold"} <= set(
+            QFontDatabase.styles("Google Sans")
+        )
+        systems = {str(system) for system in QFontDatabase.writingSystems("Google Sans")}
+        assert any("Cyrillic" in system for system in systems)
+
+
+class TestImportDialogIsUkrainian:
+    def test_no_english_in_the_import_screen(self, seeded, gui_app):
+        """Той самий обхід, що й для головного вікна -- діалог імпорту він не бачив."""
+        from PySide6.QtWidgets import QLabel, QPushButton
+
+        from autopara.ui.setup_dialog import SetupDialog
+
+        storage, _ = seeded
+        dialog = SetupDialog(storage)
+        latin = set()
+        for widget in dialog.findChildren(QLabel) + dialog.findChildren(QPushButton):
+            for word in widget.text().replace("…", " ").split():
+                stripped = word.strip("·—–-()")
+                if stripped.isascii() and stripped.isalpha() and len(stripped) > 2:
+                    latin.add(stripped)
+        assert latin <= {"AutoPara", "Zoom", "Meet", "docx"}

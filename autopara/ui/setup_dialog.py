@@ -15,7 +15,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -29,17 +28,20 @@ from PySide6.QtWidgets import (
 
 from ..core.storage import Storage
 from ..importer.schedule_parser import ParsedCourse, parse_file
+from .import_landing import DropWell
 
 
 class SetupDialog(QDialog):
     """Імпортує розклад і запам'ятовує вибір курсу та групи."""
 
-    def __init__(self, storage: Storage, parent=None):
+    def __init__(self, storage: Storage, parent=None, path: str | None = None):
+        """``path`` -- файл, який уже обрали деінде (наприклад, кинули на екран імпорту)."""
         super().__init__(parent)
         self.storage = storage
         self.parsed: list[ParsedCourse] = []
         self.setWindowTitle("Імпорт розкладу")
-        self.setMinimumWidth(540)
+        self.setMinimumWidth(560)
+        self.setAcceptDrops(True)
 
         # Знімок попереднього вибору робиться до імпорту: сам імпорт перезаписує таблиці, але
         # ординал курсу й назва групи -- це те, що переживає новий документ.
@@ -47,13 +49,16 @@ class SetupDialog(QDialog):
 
         self._build()
 
+        if path:
+            self._use_file(path)
+            return
+
         # Prefer our own copy: the file the user originally picked is often a download that has
         # since been tidied away, and the copy is byte-identical.
         settings = storage.settings()
         for candidate in (settings.schedule_copy_path, settings.last_import_path):
             if candidate and Path(candidate).is_file():
-                self.path_edit.setText(candidate)
-                self._load(candidate)
+                self._use_file(candidate)
                 break
 
     def _previous_choice(self) -> tuple[int | None, str]:
@@ -68,8 +73,8 @@ class SetupDialog(QDialog):
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 18, 20, 16)
-        layout.setSpacing(10)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
 
         title = QLabel("Імпорт розкладу")
         title.setObjectName("TitleLabel")
@@ -83,15 +88,18 @@ class SetupDialog(QDialog):
         hint.setWordWrap(True)
         layout.addWidget(hint)
 
-        file_row = QHBoxLayout()
+        # Те саме поле, що й на першому екрані: жест «перетягнути файл» має працювати скрізь,
+        # де в застосунку взагалі обирають розклад.
+        self.well = DropWell(compact=True)
+        self.well.file_dropped.connect(self._use_file)
+        self.well.clicked.connect(self._browse)
+        layout.addWidget(self.well)
+
+        # Шлях більше ніде не показується, але він потрібен імпортові як джерело файла.
         self.path_edit = QLineEdit()
-        self.path_edit.setPlaceholderText("Шлях до файла розкладу (.docx)")
         self.path_edit.setReadOnly(True)
-        browse = QPushButton("Огляд…")
-        browse.clicked.connect(self._browse)
-        file_row.addWidget(self.path_edit, 1)
-        file_row.addWidget(browse)
-        layout.addLayout(file_row)
+        self.path_edit.hide()
+        layout.addWidget(self.path_edit)
 
         course_label = QLabel("Курс")
         course_label.setObjectName("SectionLabel")
@@ -104,7 +112,7 @@ class SetupDialog(QDialog):
         group_label.setObjectName("SectionLabel")
         layout.addWidget(group_label)
         self.group_list = QListWidget()
-        self.group_list.setMinimumHeight(130)
+        self.group_list.setMinimumHeight(150)
         self.group_list.currentRowChanged.connect(self._update_summary)
         layout.addWidget(self.group_list)
 
@@ -113,17 +121,41 @@ class SetupDialog(QDialog):
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
 
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("Імпортувати")
-        self.buttons.button(QDialogButtonBox.Ok).setObjectName("Primary")
-        self.buttons.button(QDialogButtonBox.Cancel).setText("Скасувати")
-        self.buttons.accepted.connect(self._accept)
-        self.buttons.rejected.connect(self.reject)
-        layout.addWidget(self.buttons)
+        # Кнопки шикуються вручну, а не через QDialogButtonBox: на Windows той ставить
+        # головну дію ліворуч, а в цій мові інтерфейсу вона завжди крайня праворуч.
+        footer = QHBoxLayout()
+        footer.setSpacing(8)
+        footer.addStretch(1)
+
+        cancel = QPushButton("Скасувати")
+        cancel.setObjectName("Plain")
+        cancel.clicked.connect(self.reject)
+        footer.addWidget(cancel)
+
+        self.import_button = QPushButton("Імпортувати")
+        self.import_button.setObjectName("Primary")
+        self.import_button.setDefault(True)
+        self.import_button.clicked.connect(self._accept)
+        footer.addWidget(self.import_button)
+        layout.addLayout(footer)
         self._set_ready(False)
 
+    # ---------------------------------------------------------- перетягування
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 - Qt
+        self.well.dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:  # noqa: N802 - Qt
+        self.well.dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event) -> None:  # noqa: N802 - Qt
+        self.well.dragLeaveEvent(event)
+
+    def dropEvent(self, event) -> None:  # noqa: N802 - Qt
+        self.well.dropEvent(event)
+
     def _set_ready(self, ready: bool) -> None:
-        self.buttons.button(QDialogButtonBox.Ok).setEnabled(ready)
+        self.import_button.setEnabled(ready)
 
     # ------------------------------------------------------------------- load
 
@@ -133,8 +165,13 @@ class SetupDialog(QDialog):
             self, "Оберіть розклад", start_dir, "Документи Word (*.docx)"
         )
         if path:
-            self.path_edit.setText(path)
-            self._load(path)
+            self._use_file(path)
+
+    def _use_file(self, path: str) -> None:
+        """Один шлях для всіх способів обрати файл: діалог, перетягування, попередня копія."""
+        self.path_edit.setText(path)
+        self.well.show_file(path)
+        self._load(path)
 
     def _load(self, path: str) -> None:
         try:

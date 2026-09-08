@@ -16,7 +16,7 @@ files.
 ## Commands
 
 ```bash
-python -m pytest                       # all 195 tests (~18 s)
+python -m pytest                       # all 234 tests (~30 s)
 python -m pytest tests/test_parser.py  # one file
 python -m pytest -k shared             # by keyword
 python -m pytest "tests/test_parser.py::TestMergeHandling::test_shared_class_is_one_lesson_with_many_groups"
@@ -69,7 +69,15 @@ followed by a reload from storage.
 Every user-visible string in `autopara/ui/` and in `installer/AutoPara.nsi` is Ukrainian. There is
 no translation layer and no second locale — one locale needs no machinery.
 `tests/test_ui.py::test_interface_is_ukrainian` walks the live widget tree and fails on Latin words
-other than `AutoPara`, `Zoom`, `Meet`, `docx`. Docstrings, comments and the design docs stay English.
+other than `AutoPara`, `Zoom`, `Meet`, `docx`; a second walk covers the import dialog. Docstrings,
+comments and the design docs stay English.
+
+**Nothing on the left-hand rail is written.** All four buttons are icons, the app mark stands in
+for the word "AutoPara", and the course and group live in that mark's tooltip. Each button's
+meaning is a Ukrainian tooltip; giving one a label puts a word back on screen that then has to be
+translated, and widens a rail whose width is one button plus air.
+`TestIconOnlyToolbar` fails if a button gains text or loses its tooltip, and
+`test_the_sidebar_carries_no_words_at_all` walks the rail for any text at all.
 
 The importer reads documents in other languages and converts what it finds (days, course labels)
 into Ukrainian. Subject and teacher text is copied verbatim — it is data, not chrome.
@@ -152,6 +160,15 @@ per course 25/11/12/13/0/16**. Course V having no classes is real data, not a pa
 schedules must stay a valid state throughout the stack.
 
 ### Windows integration
+
+- **The app mark reaches Windows through two separate channels, and both have to be set.** The
+  executable's icon is compiled in from `build\AutoPara.ico`, which `build.ps1` renders from
+  `ui/tray.write_ico` before calling PyInstaller — every shortcut the installer creates inherits
+  it, so without that step the desktop shows PyInstaller's stock Python logo. The *taskbar button*
+  is separate: Windows attributes it to the host process unless the app calls
+  `SetCurrentProcessExplicitAppUserModelID` (`app._claim_taskbar_identity`, before the first
+  window), which is why a source run used to sit in the taskbar under Python's icon however
+  carefully `setWindowIcon` was called. `tests/test_installer.py::TestApplicationIcon` guards both.
 
 - **Autostart** is `HKCU\...\CurrentVersion\Run`, value `AutoPara`, via stdlib `winreg`. Both
   installers write the *same* value in the *same* format `"<launcher>" --hidden` that
