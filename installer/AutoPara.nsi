@@ -24,7 +24,7 @@ Unicode true
 ; Must stay identical to MainWindow.setWindowTitle(), or the "is it running?" check below silently
 ; never matches and the install writes over locked files. tests/test_installer.py asserts this.
 !define APP_DISPLAY  "AutoPara — автозапуск пар"
-!define APP_VERSION  "1.2.0"
+!define APP_VERSION  "1.3.0"
 !define APP_PUBLISHER "AutoPara"
 !define APP_EXE      "AutoPara.exe"
 !define UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
@@ -39,11 +39,20 @@ SetCompressor /SOLID lzma
 
 ; ---------------------------------------------------------------- UI
 
+; The same .ico the executable carries, so a downloaded Setup.exe is recognisable before it has
+; installed anything. build.ps1 renders it from ui/tray.write_ico before calling makensis; the
+; guard is here because makensis can also be run on its own, and a missing icon should cost the
+; NSIS default rather than the whole build.
+!if /FileExists "..\build\AutoPara.ico"
+  !define MUI_ICON   "..\build\AutoPara.ico"
+  !define MUI_UNICON "..\build\AutoPara.ico"
+!endif
+
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Запустити AutoPara"
-!define MUI_FINISHPAGE_TEXT "AutoPara встановлено.$\r$\n$\r$\nПід час першого запуску програма \
-попросить файл розкладу (.docx), а потім курс і групу."
+!define MUI_FINISHPAGE_TEXT "AutoPara встановлено.$\r$\n$\r$\nПри першому запуску перетягніть \
+у вікно файл розкладу (.docx), а потім оберіть свій курс і групу."
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS

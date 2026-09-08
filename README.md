@@ -50,7 +50,7 @@ winget install NSIS.NSIS              # once
 
 | File | Size | What it is |
 |---|---|---|
-| `dist\AutoPara-1.2.0-Setup.exe` | 34.9 MB | NSIS installer — hand this to someone who does not have the repository. |
+| `dist\AutoPara-1.3.0-Setup.exe` | 35.0 MB | NSIS installer — hand this to someone who does not have the repository. |
 | `dist\AutoPara\` | 126 MB folder | The unpacked app, if you'd rather not install. |
 
 `.\build.cmd -SkipApp` rebuilds only the installer from an existing `dist\AutoPara\`.
@@ -64,9 +64,10 @@ own account once and for all, that is
 security setting, so it is yours to make, not the build's.)
 
 The build renders the app icon before it packages anything: `build\AutoPara.ico` is drawn from the
-same code as the tray glyph and compiled into the executable, which is what every shortcut then
-inherits. Skipping that step (running PyInstaller by hand) is allowed — the app simply keeps
-PyInstaller's stock icon.
+same code as the tray glyph, compiled into the executable — which is what every shortcut inherits —
+and used for `Setup.exe` and the uninstaller too, so a downloaded installer is recognisable before
+it has installed anything. Skipping that step (running PyInstaller or makensis by hand) is allowed:
+both fall back to their stock icons.
 
 ## How it behaves
 
