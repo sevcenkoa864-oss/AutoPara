@@ -28,7 +28,6 @@ detail.
 | Autostart | **`HKCU\...\CurrentVersion\Run`** via stdlib `winreg` | User-scope (no admin), toggleable at runtime from the settings screen, and visible in Task Manager -> Startup so the user can disable it the normal way. Task Scheduler was rejected: it can require elevation and is invisible in the familiar Startup UI. |
 | Theming | **One QSS template + two palettes** (`core/theme.py`) | A single stylesheet whose colours are `$tokens`, substituted per theme. Two hand-written `.qss` files would drift: a rule added to one and forgotten in the other is invisible until someone switches theme. |
 | Packaging | **PyInstaller** (`--noconsole --onedir`) | Produces a self-contained folder + exe. |
-| Repository installer | **PyInstaller one-file `installer.exe`** carrying the source tree | Someone who downloads the repository can install with no toolchain: it validates prerequisites, installs what is missing through the terminal, and gives the app its own runtime. See "Installing from the repository". |
 
 ## Process model
 
@@ -137,7 +136,6 @@ and opening a link triggers a rebuild.
 | `autopara/core/autostart.py` | Registry `Run` key add/remove/query. |
 | `autopara/core/theme.py` | Light/dark palettes, the Windows "app theme" probe, QSS templating. |
 | `autopara/ui/*` | See `FRONTEND.md`. |
-| `installer/install_app.py` | The repository installer (tkinter, stdlib only). |
 
 ## Storage location
 
@@ -220,37 +218,31 @@ a frozen build skips it, since the frozen build *is* the installation.
 
 The refresh is a replace, per directory, for the same reason the installer's is: `runtime/` (the
 virtual environment, minutes to rebuild) and `%APPDATA%\AutoPara` are the only things it leaves
-alone. It finds the installation through `HKCU\Software\AutoPara\InstallDir`, which both
-installers write.
+alone. It finds the installation through `HKCU\Software\AutoPara\InstallDir`, which the
+installer writes.
 
-## Installing from the repository
+## One installer, on purpose
 
-`installer.exe` in the repository root — built by `installer\build_installer.ps1` from
-`installer/install_app.py` — is the path for someone who downloads the repository and has no
-toolchain. `installer.cmd` runs the same code under a system Python for anyone who would rather not
-run a binary.
+`installer/AutoPara.nsi` is the only installer. It ships the frozen PyInstaller bundle, so the
+target machine needs nothing at all: no Python, no PySide6, no network, no administrator rights.
 
-It is written against the standard library alone: tkinter for the window, `subprocess` for the
-terminal work. It has to run on a machine where nothing is installed yet, so it cannot depend on
-the packages it exists to install.
+An install-from-source variant used to sit beside it — `installer.exe` in the repository root,
+built from `installer/install_app.py`, with `installer.cmd` as its no-binary fallback. It was
+removed. For the person the app is written for it turned a single double-click into "find or
+install Python, then wait while ~100 MB of wheels download", with every one of those steps able to
+fail on a locked-down or offline machine; and shipping a prebuilt 12 MB `installer.exe` inside the
+repository put an unreviewable binary in version control that went stale as soon as the source
+changed.
 
-Its steps:
+Nothing was lost by removing it. Running from the repository is still one command —
+`pip install -r requirements.txt` then `python -m autopara` — which is what a contributor wants
+anyway, and is documented in the README.
 
-1. **Validate the prerequisites.** Find a Python >= 3.10 (`py -3`, then `python`), then check
-   `venv` and `ensurepip`. If there is no suitable Python, install one through the terminal with
-   `winget install Python.Python.3.13` and look again. Every command's output is streamed into the
-   installer's log pane, so a failure is visible rather than a silent abort.
-2. **Copy** `autopara/`, the launcher, `requirements.txt` and the docs into the chosen directory.
-3. **Build a private runtime**: a `venv` under `<install dir>\runtime` with PySide6 in it. The app
-   then does not care what the system Python holds, or what a later `pip install` does to it.
-4. **Shortcuts, autostart, Add/Remove Programs.** The Run key gets exactly the string
-   `autostart.startup_command()` produces for a source install, so the app's Settings screen sees
-   it as already enabled.
-5. **Launch AutoPara.**
-
-The two installers are not redundant. NSIS ships a frozen, Python-free bundle to someone who is
-handed a setup file; `installer.exe` installs *from source* for someone holding the repository,
-which is what keeps the repository itself directly runnable.
+Because the script and the application have to agree about several strings, `tests/test_installer.py`
+parses the `.nsi` and fails when they drift: the autostart command, the window title `FindWindow`
+looks for, the `IfSilent` guards on both prompts, and the rule that a per-user install never writes
+to `HKLM`. That test exists because the title had already drifted once, when the interface was
+translated into Ukrainian and the installer was left looking for the old English one.
 
 ### NSIS installer design
 

@@ -9,22 +9,29 @@ for whoever maintains it.
 
 ## Install
 
-Download the repository and run **`installer.exe`** from its root.
+Download **`AutoPara-Setup.exe`** from the latest release and run it. That is the whole procedure.
 
-It asks where to install, checks that everything needed is present — a suitable Python, `venv`,
-`pip` — installs through the terminal whatever is missing (including Python itself, via `winget`),
-gives the app its own runtime with PySide6 in it, creates shortcuts, turns on start-with-Windows,
-and launches AutoPara when it is done. No admin rights, no UAC prompt; it installs to
-`%LOCALAPPDATA%\Programs\AutoPara`.
+The target PC needs **nothing preinstalled** — no Python, no Qt, no VC++ redistributable; they are
+all inside the installer. Windows 10/11 64-bit.
 
-Prefer not to run a binary? `installer.cmd` runs the exact same installer with your own Python.
+It installs per-user to `%LOCALAPPDATA%\Programs\AutoPara`, so there are **no admin rights and no
+UAC prompt**. You get Start Menu and (optionally) desktop shortcuts, an entry in Add or Remove
+Programs, and an optional "start with Windows" component that launches it hidden in the tray.
 
-To rebuild `installer.exe` after changing anything:
+Silent install and uninstall are supported with `/S`. Uninstalling keeps your imported timetable in
+`%APPDATA%\AutoPara` unless you choose to delete it, so reinstalling does not lose the schedule.
+
+### Building the installer
 
 ```
-python -m pip install pyinstaller
-.\installer\build_installer.ps1
+python -m pip install pyinstaller     # once
+winget install NSIS.NSIS              # once
+.\build.ps1
 ```
+
+That produces `dist\AutoPara\AutoPara.exe` (the unpacked app, ~118 MB) and
+`dist\AutoPara-1.2.0-Setup.exe` (the installer, ~33 MB). `.\build.ps1 -SkipApp` rebuilds only the
+installer.
 
 ## Run from source
 

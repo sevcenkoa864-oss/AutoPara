@@ -27,7 +27,6 @@ python -m autopara --hidden            # start to tray with no window (the autos
 .\build.ps1                            # PyInstaller bundle + NSIS installer -> dist\
 .\build.ps1 -SkipApp                   # installer only, reusing dist\AutoPara\
 
-.\installer\build_installer.ps1        # the repo's own installer.exe (needs pyinstaller)
 ```
 
 No linter or formatter is configured; match the surrounding style.
@@ -67,7 +66,7 @@ followed by a reload from storage.
 
 ### Invariant: the interface is Ukrainian
 
-Every user-visible string in `autopara/ui/` and `installer/install_app.py` is Ukrainian. There is
+Every user-visible string in `autopara/ui/` and in `installer/AutoPara.nsi` is Ukrainian. There is
 no translation layer and no second locale — one locale needs no machinery.
 `tests/test_ui.py::test_interface_is_ukrainian` walks the live widget tree and fails on Latin words
 other than `AutoPara`, `Zoom`, `Meet`, `docx`. Docstrings, comments and the design docs stay English.
@@ -170,8 +169,11 @@ schedules must stay a valid state throughout the stack.
 - The NSIS installer is per-user (`%LOCALAPPDATA%\Programs\AutoPara`, no admin/UAC). Both of its
   prompts are guarded with `IfSilent`, or `/S` install and uninstall hang on an invisible message
   box. Uninstall keeps `%APPDATA%\AutoPara` so a reinstall does not lose the imported timetable.
-- **Two installers, not one duplicated.** `installer.exe` (repo root, from
-  `installer/install_app.py`) installs *from source* for someone who downloaded the repository: it
-  validates prerequisites, installs missing ones through the terminal, and builds a private venv.
-  It is stdlib-only — tkinter and `subprocess` — because it has to run before PySide6 exists. The
-  NSIS installer ships the frozen, Python-free bundle to someone handed a setup file.
+- **One installer, on purpose.** `installer/AutoPara.nsi` ships the frozen PyInstaller bundle, so
+  the target PC needs no Python, no PySide6 and no network. An install-from-source variant used to
+  live beside it (`installer.exe` + `installer/install_app.py`); it was removed because for an end
+  user it traded a single double-click for "find or install Python, then download ~100 MB of
+  wheels", and a prebuilt 12 MB `installer.exe` committed to git went stale the moment the source
+  changed. Contributors run from source with `pip install -r requirements.txt`.
+  `tests/test_installer.py` parses the `.nsi` and fails if it drifts from the app: the autostart
+  string, the window title `FindWindow` looks for, the `IfSilent` guards and the HKCU-only rule.
