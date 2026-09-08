@@ -214,6 +214,23 @@ class TestApplicationIcon:
             assert raw[offset : offset + 8] == b"\x89PNG\r\n\x1a\n", "entries are PNGs"
             assert length > 0
 
+    def test_the_build_can_be_run_on_an_unconfigured_machine(self):
+        """Windows blocks .ps1 outright by default, so build.ps1 alone is not a runnable build.
+
+        `.\build.ps1` fails with UnauthorizedAccess on any machine whose execution policy nobody
+        has touched -- which is every fresh one. The .cmd wrapper lifts it for the single process
+        it starts, without changing a setting for the machine or the user.
+        """
+        root = Path(__file__).resolve().parents[1]
+        wrapper = root / "build.cmd"
+        assert wrapper.is_file(), "build.ps1 needs a wrapper that Windows will actually run"
+
+        text = wrapper.read_text(encoding="utf-8")
+        assert "-ExecutionPolicy Bypass" in text
+        assert "build.ps1" in text
+        assert "%*" in text, "-SkipApp and friends must reach the script"
+        assert "Set-ExecutionPolicy" not in text, "a build must not change a security setting"
+
     def test_the_app_claims_its_own_taskbar_identity(self):
         """Without an AppUserModelID Windows hangs the button on python.exe and shows its icon."""
         app = (Path(__file__).resolve().parents[1] / "autopara" / "app.py").read_text(

@@ -16,7 +16,7 @@ files.
 ## Commands
 
 ```bash
-python -m pytest                       # all 234 tests (~30 s)
+python -m pytest                       # all 240 tests (~30 s)
 python -m pytest tests/test_parser.py  # one file
 python -m pytest -k shared             # by keyword
 python -m pytest "tests/test_parser.py::TestMergeHandling::test_shared_class_is_one_lesson_with_many_groups"
@@ -24,8 +24,9 @@ python -m pytest "tests/test_parser.py::TestMergeHandling::test_shared_class_is_
 python -m autopara                     # run from source
 python -m autopara --hidden            # start to tray with no window (the autostart path)
 
-.\build.ps1                            # PyInstaller bundle + NSIS installer -> dist\
-.\build.ps1 -SkipApp                   # installer only, reusing dist\AutoPara\
+.\build.cmd                            # PyInstaller bundle + NSIS installer -> dist\
+.\build.cmd -SkipApp                   # installer only, reusing dist\AutoPara\
+# build.cmd wraps build.ps1: Windows blocks .ps1 outright under its default execution policy.
 
 ```
 

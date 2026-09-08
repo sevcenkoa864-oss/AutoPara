@@ -9,7 +9,7 @@
 ; rights and raises no UAC prompt. Autostart lives in HKCU anyway, so a machine-wide install would
 ; buy nothing while making it harder to try on a borrowed PC.
 ;
-; Build with:  .\build.ps1        (or: makensis installer\AutoPara.nsi)
+; Build with:  .\build.cmd        (or: makensis installer\AutoPara.nsi)
 ; Expects the PyInstaller output in dist\AutoPara\ (see AutoPara.spec).
 ;
 ; This file is UTF-8 with BOM on purpose: `Unicode true` plus a BOM is what lets makensis read the

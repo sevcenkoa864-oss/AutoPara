@@ -181,7 +181,7 @@ no console handler, because the packaged app is windowed.
 ## Building
 
 ```
-.\build.ps1
+.\build.cmd
 ```
 
 Two stages, both runnable on their own:

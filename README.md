@@ -44,15 +44,23 @@ checking a change is one command rather than a reinstall. Add `--no-rebuild` to 
 ```
 python -m pip install pyinstaller     # once
 winget install NSIS.NSIS              # once
-.\build.ps1
+.\build.cmd
 ```
 
 | File | Size | What it is |
 |---|---|---|
-| `dist\AutoPara-1.2.0-Setup.exe` | ≈37 MB | NSIS installer — hand this to someone who does not have the repository. |
-| `dist\AutoPara\AutoPara.exe` | ≈127 MB folder | The unpacked app, if you'd rather not install. |
+| `dist\AutoPara-1.2.0-Setup.exe` | 34.9 MB | NSIS installer — hand this to someone who does not have the repository. |
+| `dist\AutoPara\` | 126 MB folder | The unpacked app, if you'd rather not install. |
 
-`.\build.ps1 -SkipApp` rebuilds only the installer from an existing `dist\AutoPara\`.
+`.\build.cmd -SkipApp` rebuilds only the installer from an existing `dist\AutoPara\`.
+
+**Run `build.cmd`, not `build.ps1` directly.** Windows refuses to run `.ps1` files at all under its
+default execution policy, so `.\build.ps1` fails with *UnauthorizedAccess* on any machine nobody
+has configured. `build.cmd` lifts that for the single process it starts — it changes no setting,
+for the machine or for you, and needs no administrator. (If you would rather allow scripts for your
+own account once and for all, that is
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` in an ordinary PowerShell window; it is a
+security setting, so it is yours to make, not the build's.)
 
 The build renders the app icon before it packages anything: `build\AutoPara.ico` is drawn from the
 same code as the tray glyph and compiled into the executable, which is what every shortcut then
@@ -120,6 +128,6 @@ Read these before changing anything:
 python -m pytest
 ```
 
-239 tests, about 30 seconds. Parser tests run against the real schedule document, which is not
+240 tests, about 30 seconds. Parser tests run against the real schedule document, which is not
 committed. Put it on the Desktop or set `AUTOPARA_TEST_DOCX` to its path; the tests skip if it
 cannot be found — so check the count, not just the colour.
