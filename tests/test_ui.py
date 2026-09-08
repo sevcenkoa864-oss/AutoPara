@@ -34,6 +34,35 @@ from autopara.ui.class_card import LESSON_MIME, ClassCard, groups_word, subject_
 from autopara.ui.week_grid import HOURS, GridCell, WeekGrid  # noqa: E402
 
 
+def _mouse(kind, button):
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+
+    return QMouseEvent(kind, QPointF(5, 5), QPointF(5, 5), button, button, Qt.NoModifier)
+
+
+def press_left(widget):
+    from PySide6.QtCore import QEvent, Qt
+
+    widget.mousePressEvent(_mouse(QEvent.MouseButtonPress, Qt.LeftButton))
+
+
+def release_left(widget):
+    from PySide6.QtCore import QEvent, Qt
+
+    widget.mouseReleaseEvent(_mouse(QEvent.MouseButtonRelease, Qt.LeftButton))
+
+
+def right_click(widget):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QContextMenuEvent
+
+    point = QPoint(5, 5)
+    widget.contextMenuEvent(
+        QContextMenuEvent(QContextMenuEvent.Mouse, point, widget.mapToGlobal(point))
+    )
+
+
 @pytest.fixture
 def seeded(tmp_path, courses):
     storage = Storage(tmp_path / "ui.db")
@@ -266,6 +295,37 @@ class TestClassCard:
         assert groups_word(2) == "групи"
         assert groups_word(5) == "груп"
 
+    def test_left_click_and_right_click_are_separate_signals(self, seeded, gui_app):
+        """Left click joins the class; right click asks for the actions menu."""
+        storage, group = seeded
+        lesson = storage.lessons_for_group(group.id)[0]
+        card = ClassCard(lesson)
+        clicks: list[int] = []
+        menus: list[int] = []
+        card.clicked.connect(clicks.append)
+        card.menu_requested.connect(menus.append)
+
+        press_left(card)
+        release_left(card)
+        assert clicks == [lesson.id], "left click must report a plain click"
+        assert menus == [], "left click must not raise the menu"
+
+        right_click(card)
+        assert menus == [lesson.id], "right click must ask for the menu"
+        assert clicks == [lesson.id], "right click must not also join the class"
+
+    def test_a_drag_is_not_a_click(self, seeded, gui_app):
+        """Moving a card must not join its class on release."""
+        storage, group = seeded
+        card = ClassCard(storage.lessons_for_group(group.id)[0])
+        clicks: list[int] = []
+        card.clicked.connect(clicks.append)
+
+        press_left(card)
+        card._dragging = True  # what mouseMoveEvent sets once the pointer travels far enough
+        release_left(card)
+        assert clicks == []
+
 
 class TestTheme:
     def test_both_palettes_resolve_every_token(self):
@@ -359,6 +419,89 @@ class TestCatchupBanner:
 
 
 class TestMainWindow:
+    def test_left_click_joins_the_class(self, seeded, gui_app, monkeypatch):
+        """One click is the whole point of the app, so it must not cost a menu choice."""
+        from autopara.ui.main_window import MainWindow
+
+        storage, group = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        window.reload()
+        lesson = next(l for l in storage.lessons_for_group(group.id) if l.url)
+
+        opened: list[int] = []
+        monkeypatch.setattr(
+            window.scheduler, "open_now", lambda lid, day=None: opened.append(lid) or True
+        )
+        # A menu here would block on exec(); fail loudly instead of hanging.
+        monkeypatch.setattr(
+            window, "_show_lesson_menu",
+            lambda _: pytest.fail("left click must not raise the actions menu"),
+        )
+
+        window._lesson_clicked(lesson.id)
+        assert opened == [lesson.id]
+
+    def test_right_click_raises_the_actions_menu(self, seeded, gui_app, monkeypatch):
+        from autopara.ui.main_window import MainWindow
+
+        storage, group = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        window.reload()
+        lesson = next(l for l in storage.lessons_for_group(group.id) if l.url)
+
+        shown: list[int] = []
+        monkeypatch.setattr(window, "_show_lesson_menu", lambda les: shown.append(les.id))
+        monkeypatch.setattr(
+            window.scheduler, "open_now",
+            lambda *a, **k: pytest.fail("right click must not open the link"),
+        )
+
+        window._lesson_menu_requested(lesson.id)
+        assert shown == [lesson.id]
+
+    def test_left_click_without_a_link_offers_the_menu_instead(
+        self, seeded, gui_app, monkeypatch
+    ):
+        """There is nothing to open, so the click surfaces the menu that can add a link."""
+        from autopara.ui.main_window import MainWindow
+
+        storage, group = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        window.reload()
+        no_link = next(l for l in storage.lessons_for_group(group.id) if not l.url)
+
+        shown: list[int] = []
+        monkeypatch.setattr(window, "_show_lesson_menu", lambda les: shown.append(les.id))
+        monkeypatch.setattr(
+            window.scheduler, "open_now",
+            lambda *a, **k: pytest.fail("a lesson with no link must never be opened"),
+        )
+
+        window._lesson_clicked(no_link.id)
+        assert shown == [no_link.id]
+
+    def test_the_grid_wires_both_mouse_buttons(self, seeded, gui_app, monkeypatch):
+        """Emitting the grid's signals must reach the window, not just exist on the card."""
+        from autopara.ui.main_window import MainWindow
+
+        storage, group = seeded
+        window = MainWindow(storage, Scheduler(storage))
+        window.reload()
+        lesson = next(l for l in storage.lessons_for_group(group.id) if l.url)
+
+        opened: list[int] = []
+        shown: list[int] = []
+        monkeypatch.setattr(
+            window.scheduler, "open_now", lambda lid, day=None: opened.append(lid) or True
+        )
+        monkeypatch.setattr(window, "_show_lesson_menu", lambda les: shown.append(les.id))
+
+        window.grid.lesson_clicked.emit(lesson.id)
+        assert opened == [lesson.id] and shown == []
+
+        window.grid.lesson_menu_requested.emit(lesson.id)
+        assert shown == [lesson.id] and opened == [lesson.id]
+
     def test_builds_and_reloads(self, seeded, gui_app):
         from autopara.ui.main_window import MainWindow
 

@@ -161,7 +161,8 @@ class GridCanvas(QWidget):
 class WeekGrid(QScrollArea):
     """Renders one group's week. Owns no state -- it is rebuilt from storage on every change."""
 
-    lesson_clicked = Signal(int)
+    lesson_clicked = Signal(int)             # left click: join the class
+    lesson_menu_requested = Signal(int)      # right click: the actions menu
     slot_clicked = Signal(int, str)          # day_index, "HH:00"
     lesson_dropped = Signal(int, int, str)   # lesson id, day_index, "HH:00"
 
@@ -342,6 +343,7 @@ class WeekGrid(QScrollArea):
                 is_next=lesson.id == next_lesson_id,
             )
             card.clicked.connect(self.lesson_clicked.emit)
+            card.menu_requested.connect(self.lesson_menu_requested.emit)
             container = QWidget()
             box = QVBoxLayout(container)
             box.setContentsMargins(4, top, 4, bottom)

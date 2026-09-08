@@ -31,8 +31,8 @@ the document wrote it.
 
 The grid is editable from the moment it opens. The old **Edit** toggle is gone: it guarded against
 a stray click on a read-only calendar, but every interesting action — open, edit, mark, delete —
-now lives behind a menu that the click itself raises, so nothing destructive happens without a
-second, named choice. A mode that must be switched on before the app can be used is a mode nobody
+now lives behind the right-click menu, so nothing destructive happens without a second, named
+choice, while the one harmless action — joining the class — stays on the left button. A mode that must be switched on before the app can be used is a mode nobody
 wants.
 
 ## Week grid
@@ -85,7 +85,9 @@ onto a cell rectangle instead. The payload is an id rather than the lesson itsel
 can never carry stale data across.
 
 A press only counts as a click when the pointer never travelled far enough to start a drag —
-otherwise every drag would also open the actions menu on release.
+otherwise every drag would also join the class on release. The menu is raised from
+`contextMenuEvent` rather than from a right-button release, so the keyboard's Menu key works too
+and the event never falls through to the grid underneath.
 
 ### Rebuilding the grid
 
@@ -93,7 +95,7 @@ otherwise every drag would also open the actions menu on release.
 makes it a top-level window for the moment between the rebuild and the event loop running
 `deleteLater`, and rebuilding a whole week that way threw dozens of stray top-levels at the window
 manager — small empty windows flashing across the screen on every reload, most visibly right after
-clicking a class, because opening its link triggers one. For the same reason, an action that opens
+left-clicking a class, because opening its link triggers one. For the same reason, an action that opens
 a link does *not* reload: `Scheduler.lesson_opened` already does, and a second full rebuild landing
 while the browser starts is exactly the churn to avoid.
 
@@ -113,7 +115,12 @@ shared sessions.
 
 ### Clicking a card
 
-One menu, built from what the lesson actually is:
+**Left click joins the class** — it opens the link straight away, with no menu in between. That is
+the one thing the app exists to do, so it costs one click. If the lesson has no link there is
+nothing to open, and the click raises the menu below instead, whose first item is exactly the
+remedy.
+
+**Right click opens the actions menu**, built from what the lesson actually is:
 
 - **With a link** — Відкрити посилання · Редагувати… · Позначити як відкриту · Позначити як
   пропущену · (Зняти позначку) · Видалити пару.

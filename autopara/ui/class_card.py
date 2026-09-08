@@ -76,7 +76,8 @@ def groups_word(count: int) -> str:
 class ClassCard(QFrame):
     """Shows subject, teacher, time, provider and state. Emits on click, drags to move."""
 
-    clicked = Signal(int)  # lesson id
+    clicked = Signal(int)        # lesson id -- left click: join the class
+    menu_requested = Signal(int)  # lesson id -- right click: the actions menu
 
     def __init__(
         self, lesson: Lesson, status: str | None = None, is_next: bool = False, parent=None
@@ -214,6 +215,15 @@ class ClassCard(QFrame):
         self._press_at = None
         self._dragging = False
         super().mouseReleaseEvent(event)
+
+    def contextMenuEvent(self, event):  # noqa: N802 - Qt naming
+        """Right click asks for the actions menu.
+
+        Handled here rather than in mouseReleaseEvent so the keyboard's Menu key works too, and so
+        Qt does not also deliver the event to the grid underneath.
+        """
+        event.accept()
+        self.menu_requested.emit(self.lesson.id)
 
     @staticmethod
     def startDragDistance() -> int:  # noqa: N802 - mirrors Qt's own naming

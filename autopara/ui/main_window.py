@@ -1,7 +1,8 @@
 """Головне вікно: панель інструментів, банер пропущеної пари, тижнева сітка та рядок стану.
 
-Режиму редагування немає: сітка редагована завжди. Клік по парі відкриває меню дій, клік по
-порожній клітинці пропонує створити пару, перетягування переносить пару в інший день або слот.
+Режиму редагування немає: сітка редагована завжди. Лівий клік по парі підключає до неї, права
+кнопка відкриває меню дій, клік по порожній клітинці пропонує створити пару, перетягування
+переносить пару в інший день або слот.
 
 Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
@@ -81,6 +82,7 @@ class MainWindow(QMainWindow):
 
         self.grid = WeekGrid()
         self.grid.lesson_clicked.connect(self._lesson_clicked)
+        self.grid.lesson_menu_requested.connect(self._lesson_menu_requested)
         self.grid.slot_clicked.connect(self._slot_clicked)
         self.grid.lesson_dropped.connect(self._lesson_dropped)
         layout.addWidget(self.grid, 1)
@@ -308,10 +310,31 @@ class MainWindow(QMainWindow):
     # ---------------------------------------------------------------- actions
 
     def _lesson_clicked(self, lesson_id: int) -> None:
+        """Лівий клік — підключитися до пари.
+
+        Це те, заради чого програму відкривають, тож воно коштує один клік, а не клік плюс вибір
+        у меню. Решта дій — на правій кнопці.
+        """
         lesson = self.storage.lesson(lesson_id)
         if lesson is None:
             return
-        self._show_lesson_menu(lesson)
+        if not lesson.url:
+            # Відкривати нічого: показуємо меню, де перший пункт — додати посилання.
+            self._show_lesson_menu(lesson)
+            return
+
+        day = self.date_of(lesson)
+        # ``lesson_opened`` перезавантажує сітку сам, тож тут другого перемальовування немає.
+        if not self.scheduler.open_now(lesson.id, day):
+            QMessageBox.warning(
+                self, "Не вдалося відкрити", "Посилання не вдалося відкрити у браузері."
+            )
+
+    def _lesson_menu_requested(self, lesson_id: int) -> None:
+        """Права кнопка — повне меню дій для пари."""
+        lesson = self.storage.lesson(lesson_id)
+        if lesson is not None:
+            self._show_lesson_menu(lesson)
 
     def _show_lesson_menu(self, lesson: Lesson) -> None:
         """Одне меню дій для пари: відкрити / редагувати / позначити / видалити."""
