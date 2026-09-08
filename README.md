@@ -5,6 +5,11 @@ grid, and opens each class's Zoom / Google Meet link in the default browser a mi
 starts. **The application's interface is Ukrainian**; this README and the design docs are English,
 for whoever maintains it.
 
+The interface follows Apple's Human Interface Guidelines as far as Qt allows: one accent colour,
+squircle corners, hairlines instead of boxes, a light and a dark theme designed together, and a
+72 px icon rail down the left rather than a toolbar across the top — the week grid is wide and
+short, and a top bar spends the height a calendar is always short of.
+
 ![week grid](docs/week-grid.png)
 
 ## Install
@@ -21,18 +26,6 @@ Programs, and an optional "start with Windows" component that launches it hidden
 Silent install and uninstall are supported with `/S`. Uninstalling keeps your imported timetable in
 `%APPDATA%\AutoPara` unless you choose to delete it, so reinstalling does not lose the schedule.
 
-### Building the installer
-
-```
-python -m pip install pyinstaller     # once
-winget install NSIS.NSIS              # once
-.\build.ps1
-```
-
-That produces `dist\AutoPara\AutoPara.exe` (the unpacked app, ~118 MB) and
-`dist\AutoPara-1.2.0-Setup.exe` (the installer, ~33 MB). `.\build.ps1 -SkipApp` rebuilds only the
-installer.
-
 ## Run from source
 
 ```
@@ -40,27 +33,31 @@ python -m pip install -r requirements.txt
 python -m autopara
 ```
 
-On first launch it opens on the import screen: **drag the `.docx` onto it** (or press
-`Обрати файл…`), then pick your course and group.
+On first launch it opens on the import screen: **drag the `.docx` onto it** — anywhere on the
+screen, not just the dashed well — or press `Обрати файл…`. Then pick your course and group.
 
 `python -m autopara` also **refreshes the installed copy** from the source it is running out of, so
 checking a change is one command rather than a reinstall. Add `--no-rebuild` to skip that.
 
-## Build the standalone (Python-free) bundle
+## Build it yourself
 
 ```
+python -m pip install pyinstaller     # once
+winget install NSIS.NSIS              # once
 .\build.ps1
 ```
 
 | File | Size | What it is |
 |---|---|---|
-| `dist\AutoPara-1.1.0-Setup.exe` | ~35 MB | NSIS installer — hand this to someone who does not have the repository. |
-| `dist\AutoPara\AutoPara.exe` | ~118 MB folder | The unpacked app, if you'd rather not install. |
+| `dist\AutoPara-1.2.0-Setup.exe` | ≈37 MB | NSIS installer — hand this to someone who does not have the repository. |
+| `dist\AutoPara\AutoPara.exe` | ≈127 MB folder | The unpacked app, if you'd rather not install. |
 
-That bundle needs **nothing preinstalled** — no Python, no Qt, no VC++ redistributable. Windows
-10/11 64-bit. Silent install and uninstall are supported (`/S`), and uninstalling keeps your
-imported timetable in `%APPDATA%\AutoPara` unless you choose to delete it. Building it needs NSIS:
-`winget install NSIS.NSIS`.
+`.\build.ps1 -SkipApp` rebuilds only the installer from an existing `dist\AutoPara\`.
+
+The build renders the app icon before it packages anything: `build\AutoPara.ico` is drawn from the
+same code as the tray glyph and compiled into the executable, which is what every shortcut then
+inherits. Skipping that step (running PyInstaller by hand) is allowed — the app simply keeps
+PyInstaller's stock icon.
 
 ## How it behaves
 
@@ -74,12 +71,18 @@ imported timetable in `%APPDATA%\AutoPara` unless you choose to delete it. Build
 - **Reminders.** An optional tray notification a configurable number of minutes before each class.
 - **Any-language documents.** Day names are recognised in Ukrainian, Russian, English, Polish,
   German and several other languages; the schedule the app builds from them is always Ukrainian.
-- **Editable straight away** — no edit mode. Click a class for its actions (open, edit, mark as
-  opened or skipped, delete), click an empty slot to create one there, drag a class to move it.
-  A class with no link offers to add one instead of opening.
+- **Editable straight away** — no edit mode. **Left click joins the class**, which is the one thing
+  the app exists for, so it costs one click. **Right click opens the actions menu** (open, edit,
+  mark as opened or skipped, delete). Click an empty slot to create a class there, drag a class to
+  move it. A class with no link offers to add one instead of opening.
 - **A real calendar day**, 08:00 to 18:00 in hourly rows, with each class drawn across the time it
-  actually occupies rather than dropped into a slot. Columns are weekdays; the timetable repeats
-  every week, so there are no dates and nothing to navigate.
+  actually occupies rather than dropped into a slot — a 09:30 class starts halfway down the 09:00
+  row. Columns are weekdays; the timetable repeats every week, so there are no dates and nothing to
+  navigate. The whole day fits the window without scrolling.
+- **A card is as tall as its class is long,** so a long subject cannot always be shown in full. The
+  card is told its height and drops whole lines in a fixed order — the time goes first, since its
+  position on the grid already says it — and its tooltip carries the subject, the teacher, the
+  exact times, every group and the link.
 - **Light and dark themes**, following the Windows app theme until you pin one.
 - **Shared classes.** One session taught to several groups is a single card tagged with the groups,
   and its link opens once.
@@ -100,7 +103,8 @@ Authorised by MaBoRo (Vladyslav Tishyn) — vlad.tishyn@gmail.com
 
 The interface is set in **Google Sans**, bundled in `autopara/ui/fonts` under the SIL Open Font
 License 1.1 — the licence ships beside the font files as `OFL.txt`. Nothing else is bundled: every
-icon in the app, the app mark included, is drawn in code.
+icon in the app is drawn in code, the app mark included, and so is the `.ico` Windows reads for the
+executable and the desktop shortcut.
 
 ## Documentation
 
@@ -116,6 +120,6 @@ Read these before changing anything:
 python -m pytest
 ```
 
-Parser tests run against the real schedule document, which is not committed. Put it on the Desktop
-or set `AUTOPARA_TEST_DOCX` to its path; the tests skip if it cannot be found — so check the count,
-not just the colour.
+239 tests, about 30 seconds. Parser tests run against the real schedule document, which is not
+committed. Put it on the Desktop or set `AUTOPARA_TEST_DOCX` to its path; the tests skip if it
+cannot be found — so check the count, not just the colour.
