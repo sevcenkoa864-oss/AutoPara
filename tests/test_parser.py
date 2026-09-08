@@ -3,8 +3,6 @@
 The expected numbers come from inspecting the real document and are recorded in
 docs/BACKEND.md section 1. If the source document is replaced these will change; update both
 places together.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

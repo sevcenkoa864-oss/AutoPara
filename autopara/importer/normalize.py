@@ -8,8 +8,6 @@ The document is *not* required to be Ukrainian. Day names are recognised through
 alias table (BACKEND.md R10) and everything the app generates from them -- day labels, course
 names -- is emitted in Ukrainian, so a Polish or English timetable still produces a Ukrainian
 schedule.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

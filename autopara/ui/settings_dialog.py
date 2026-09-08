@@ -1,7 +1,4 @@
-"""Налаштування: сповіщення, поведінка з пропущеними парами, тема, автозапуск.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-"""
+"""Налаштування: сповіщення, поведінка з пропущеними парами, тема, автозапуск."""
 
 from __future__ import annotations
 

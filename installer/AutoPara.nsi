@@ -1,5 +1,4 @@
-﻿; Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-; NSIS installer for AutoPara -- the only installer in this project.
+﻿; NSIS installer for AutoPara -- the only installer in this project.
 ;
 ; It ships the frozen PyInstaller bundle, so the target machine needs nothing at all: no Python,
 ; no PySide6, no network. That is the whole argument for it over an install-from-source script,
@@ -26,7 +25,7 @@ Unicode true
 ; never matches and the install writes over locked files. tests/test_installer.py asserts this.
 !define APP_DISPLAY  "AutoPara — автозапуск пар"
 !define APP_VERSION  "1.2.0"
-!define APP_PUBLISHER "MaBoRo (Vladyslav Tishyn)"
+!define APP_PUBLISHER "AutoPara"
 !define APP_EXE      "AutoPara.exe"
 !define UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 !define RUN_KEY      "Software\Microsoft\Windows\CurrentVersion\Run"

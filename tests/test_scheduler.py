@@ -3,8 +3,6 @@
 ``evaluate`` is a pure function, so the trigger boundaries are tested against a frozen clock with
 no Qt event loop and no real waiting. The browser is stubbed throughout -- these tests never open
 anything.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

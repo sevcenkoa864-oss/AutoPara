@@ -1,4 +1,3 @@
-# Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 # Builds AutoPara: PyInstaller bundle, then the NSIS installer.
 #
 #   .\build.ps1              app + installer

@@ -2,8 +2,6 @@
 
 Drives ``Scheduler.tick`` with an injected clock, so a full teaching day is simulated in
 milliseconds. The browser is stubbed -- nothing is ever actually opened.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

@@ -1,7 +1,4 @@
-"""Storage tests, focused on the guarantees the app's correctness rests on.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-"""
+"""Storage tests, focused on the guarantees the app's correctness rests on."""
 
 from __future__ import annotations
 

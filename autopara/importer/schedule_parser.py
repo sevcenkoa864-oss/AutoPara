@@ -5,8 +5,6 @@ Implements the rules documented in docs/BACKEND.md section 2. The two that matte
 * **R2** a group owns a *range* of logical columns, and a lesson cell belongs to every group whose
   range it overlaps -- that is how one shared session maps to several groups.
 * **R5** a vertically merged lesson cell is a single block spanning several pairs.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

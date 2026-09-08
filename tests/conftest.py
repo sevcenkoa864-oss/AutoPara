@@ -3,8 +3,6 @@
 The document is the user's personal timetable and is deliberately *not* copied into the repository
 (it contains live meeting links). Point ``AUTOPARA_TEST_DOCX`` at it, or leave it on the Desktop
 where the importer found it originally.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

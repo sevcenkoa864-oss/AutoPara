@@ -11,8 +11,6 @@ also means a glyph is tinted by the caller, so the same icon reads correctly in 
 
 Every shape is described on a 24x24 grid and scaled to the requested size, with a stroke weight
 picked to sit alongside the interface font rather than under it.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

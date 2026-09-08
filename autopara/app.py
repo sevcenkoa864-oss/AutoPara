@@ -1,7 +1,4 @@
-"""Application bootstrap: single-instance guard, wiring, and the tray lifecycle.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-"""
+"""Application bootstrap: single-instance guard, wiring, and the tray lifecycle."""
 
 from __future__ import annotations
 
@@ -26,7 +23,7 @@ SERVER_NAME = "AutoPara.SingleInstance"
 # Windows groups taskbar buttons by this string and takes the icon from whatever owns it. Left
 # unset, the owner is the *host* process -- python.exe when running from source -- so AutoPara sat
 # in the taskbar under Python's icon however carefully its own window icon was set.
-APP_USER_MODEL_ID = "MaBoRo.AutoPara"
+APP_USER_MODEL_ID = "AutoPara.Desktop"
 
 FONT_DIR = Path(__file__).resolve().parent / "ui" / "fonts"
 

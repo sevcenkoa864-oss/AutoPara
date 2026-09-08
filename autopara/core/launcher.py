@@ -1,7 +1,4 @@
-"""Opens meeting links in the user's default browser.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-"""
+"""Opens meeting links in the user's default browser."""
 
 from __future__ import annotations
 

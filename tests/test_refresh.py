@@ -3,8 +3,6 @@
 These tests are pure filesystem work -- no Qt, no registry. What they pin down is the one thing
 that made "reinstall and check" untrustworthy: a refresh must *replace* the directories it owns,
 never merge into them, or a module deleted in the new version stays importable in the old one.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

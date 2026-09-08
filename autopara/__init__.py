@@ -1,5 +1,2 @@
-"""__init__.py
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-"""
+"""__init__.py"""
 

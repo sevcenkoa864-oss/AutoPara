@@ -7,9 +7,7 @@
  * Shape and spacing follow Apple's Human Interface Guidelines as far as Qt allows. What Qt does
  * NOT allow, and which therefore lives in Python instead: shadows (QGraphicsDropShadowEffect in
  * class_card.py), letter spacing, transitions, and any kind of backdrop blur. Radii are concentric
- * — a control nested in a container gets a smaller radius than the container, or the curves clash.
- *
- * Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com */
+ * — a control nested in a container gets a smaller radius than the container, or the curves clash. */
 
 QWidget {
     background: $bg;

@@ -1,7 +1,4 @@
-"""UI tests. Run headless via the offscreen Qt platform -- no window is ever shown.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-"""
+"""UI tests. Run headless via the offscreen Qt platform -- no window is ever shown."""
 
 from __future__ import annotations
 

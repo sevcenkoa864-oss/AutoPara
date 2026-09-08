@@ -7,8 +7,6 @@ each tick simply re-asks "what is due right now?".
 The decision logic lives in :func:`evaluate`, which is a pure function of (lesson, now, lead,
 already-fired) so it can be tested without a Qt event loop or a real clock. The advance reminder
 is :func:`reminder_due`, kept separate so a reminder can never be mistaken for a trigger.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

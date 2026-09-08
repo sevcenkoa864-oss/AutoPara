@@ -5,8 +5,6 @@ the start of is not something to act on without asking: the browser tab arrives 
 sometimes several at once, and the user is left closing windows and leaving calls. So the app says
 what happened and offers two buttons -- "Підключитися зараз" and "Закрити" -- and does nothing
 until one is pressed. See docs/ARCHITECTURE.md "Scheduling and catch-up".
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

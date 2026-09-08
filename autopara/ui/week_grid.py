@@ -14,8 +14,6 @@ Sunday appears only if a lesson actually lands on it (docs/FRONTEND.md).
 
 The grid is interactive in three ways, all of which report upwards rather than touching storage:
 clicking a card, clicking an empty hour, and dropping a card onto another hour.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

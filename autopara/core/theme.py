@@ -7,8 +7,6 @@ the light theme and be forgotten in the dark one.
 The stored ``theme`` setting is ``system`` | ``light`` | ``dark``. ``system`` -- what a fresh
 install uses -- reads Windows' own "app mode" from the registry, so AutoPara comes up matching the
 desktop it was installed on.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

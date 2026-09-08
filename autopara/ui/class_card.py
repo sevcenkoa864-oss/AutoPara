@@ -3,8 +3,6 @@
 The card is both a click target (it opens the actions menu) and a drag source: dragging it onto
 another grid cell moves the class to that day and slot. The two must not fight each other, so a
 press only counts as a click when the pointer never travelled far enough to start a drag.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

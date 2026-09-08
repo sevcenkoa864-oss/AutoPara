@@ -1,7 +1,4 @@
-"""Іконка в системному треї, меню та сповіщення.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-"""
+"""Іконка в системному треї, меню та сповіщення."""
 
 from __future__ import annotations
 

@@ -104,10 +104,6 @@ PyInstaller's stock icon.
 
 Closing the window hides it to the tray; use the tray menu to quit.
 
-## Author
-
-Authorised by MaBoRo (Vladyslav Tishyn) — vlad.tishyn@gmail.com
-
 ## Third-party
 
 The interface is set in **Google Sans**, bundled in `autopara/ui/fonts` under the SIL Open Font

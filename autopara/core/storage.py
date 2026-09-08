@@ -1,8 +1,5 @@
 """SQLite persistence. The database is the single source of truth for the whole app.
 
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
-
-
 The schema is documented in docs/BACKEND.md section 3. The one invariant worth restating here:
 ``occurrences`` carries ``UNIQUE(lesson_id, occur_date)`` and the scheduler inserts that row
 *before* opening a browser, so "open each class exactly once" is enforced by the database rather

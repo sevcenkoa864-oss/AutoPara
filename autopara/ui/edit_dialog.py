@@ -2,8 +2,6 @@
 
 Час пари задається вручну -- початок і кінець. Сітка тижня розкладає пару за реальним часом, тож
 заняття не зобов'язане збігатися ані з годиною, ані зі стандартним слотом.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

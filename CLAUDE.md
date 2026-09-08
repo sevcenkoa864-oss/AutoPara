@@ -9,10 +9,6 @@ must be **read before starting any coding task** and **updated in the same commi
 architecture, data model, UI structure or behavior. Stale docs are treated as a bug in this project.
 Keep them concise and current rather than appending changelogs.
 
-All source files carry the author line `Authorised by MaBoRo (Vladyslav Tishyn),
-vlad.tishyn@gmail.com` in their module docstring or leading comment; see `AUTHORS`. Keep it on new
-files.
-
 ## Commands
 
 ```bash

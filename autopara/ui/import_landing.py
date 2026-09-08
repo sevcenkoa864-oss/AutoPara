@@ -6,8 +6,6 @@
 
 Файл приймає ``DropWell``, а не саме вікно: поле знає обидва свої стани (запрошення і вибраний
 файл) і його ж використовує діалог імпорту, тож жест «перетягнути» працює однаково в обох місцях.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

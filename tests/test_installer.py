@@ -8,8 +8,6 @@ and every assertion here exists because the two drifting apart fails silently:
   entry as disabled and rewrites it on the next launch;
 * the window title it looks for must match the app's, or "AutoPara is running" never triggers and
   the install writes over locked files. That had already drifted once, when the UI was translated.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

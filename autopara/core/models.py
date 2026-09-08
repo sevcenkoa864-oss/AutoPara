@@ -1,8 +1,6 @@
 """Dataclasses shared between storage, scheduler and UI.
 
 These mirror the SQLite schema documented in docs/BACKEND.md section 3.
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations

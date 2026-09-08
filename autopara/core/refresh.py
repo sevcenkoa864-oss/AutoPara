@@ -12,8 +12,6 @@ directory it owns is removed and written again.
 
 What it never touches: ``runtime/`` (the virtual environment, which takes minutes to rebuild) and
 ``%APPDATA%\\AutoPara`` (the database and the archived timetable).
-
-Authorised by MaBoRo (Vladyslav Tishyn), vlad.tishyn@gmail.com
 """
 
 from __future__ import annotations
