@@ -205,6 +205,52 @@ def write_ico(path) -> Path:
     return path
 
 
+def write_icns(path) -> Path:
+    """Write the mark to an Apple .icns file and return where it went.
+
+    Generates all standard Retina and non-Retina icon sizes (16, 32, 64, 128, 256, 512, 1024)
+    into a temporary .iconset and compiles them using macOS's built-in iconutil.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    sizes = [
+        (16, "icon_16x16.png"),
+        (32, "icon_16x16@2x.png"),
+        (32, "icon_32x32.png"),
+        (64, "icon_32x32@2x.png"),
+        (128, "icon_128x128.png"),
+        (256, "icon_128x128@2x.png"),
+        (256, "icon_256x256.png"),
+        (512, "icon_256x256@2x.png"),
+        (512, "icon_512x512.png"),
+        (1024, "icon_512x512@2x.png"),
+    ]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        iconset_dir = Path(temp_dir) / "AutoPara.iconset"
+        iconset_dir.mkdir()
+
+        for px, file_name in sizes:
+            pixmap = icon_pixmap(px)
+            pixmap.save(str(iconset_dir / file_name), "PNG")
+
+        temp_icns = Path(temp_dir) / "AutoPara.icns"
+        subprocess.run(
+            ["iconutil", "-c", "icns", str(iconset_dir), "-o", str(temp_icns)],
+            check=True,
+            capture_output=True,
+        )
+        shutil.copyfile(temp_icns, path)
+
+    return path
+
+
+
 class Tray(QObject):
     """Володіє іконкою трею. Повідомляє про намір — рішення ухвалює застосунок."""
 

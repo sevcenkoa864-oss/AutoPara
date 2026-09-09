@@ -123,9 +123,11 @@ class DropWell(QFrame):
 
     def show_file(self, path: str) -> None:
         """Показує ім'я файла, а не весь шлях: шлях -- це не те, що користувач тут перевіряє."""
-        self.filename.setText(Path(path).name)
+        name = Path(str(path).replace("\\", "/")).name
+        self.filename.setText(name)
         self.filename.show()
         self.text.setText("Натисніть, щоб обрати інший")
+
 
     def _set_hover(self, hovering: bool) -> None:
         if self._hovering() == hovering:

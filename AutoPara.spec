@@ -14,11 +14,19 @@ block_cipher = None
 # hand without that step is allowed -- the bundle just carries PyInstaller's stock icon, which is
 # the Python logo, and the desktop shortcut with it.
 import os
+import sys
 
-APP_ICON = os.path.join("build", "AutoPara.ico")
-if not os.path.isfile(APP_ICON):
-    print(f"AutoPara.spec: {APP_ICON} is missing; the exe will keep PyInstaller's stock icon")
-    APP_ICON = None
+if sys.platform == "darwin":
+    APP_ICON = os.path.join("build", "AutoPara.icns")
+    if not os.path.isfile(APP_ICON):
+        print(f"AutoPara.spec: {APP_ICON} is missing; the app will keep PyInstaller's stock icon")
+        APP_ICON = None
+else:
+    APP_ICON = os.path.join("build", "AutoPara.ico")
+    if not os.path.isfile(APP_ICON):
+        print(f"AutoPara.spec: {APP_ICON} is missing; the exe will keep PyInstaller's stock icon")
+        APP_ICON = None
+
 
 analysis = Analysis(
     ["autopara_launch.pyw"],
@@ -84,3 +92,22 @@ collect = COLLECT(
     upx_exclude=[],
     name="AutoPara",
 )
+
+if sys.platform == "darwin":
+    app = BUNDLE(
+        collect,
+        name="AutoPara.app",
+        icon=APP_ICON,
+        bundle_identifier="com.autopara.app",
+        info_plist={
+            "CFBundleName": "AutoPara",
+            "CFBundleDisplayName": "AutoPara",
+            "CFBundleGetInfoString": "AutoPara — автозапуск пар",
+            "CFBundleIdentifier": "com.autopara.app",
+            "CFBundleVersion": "1.4.0",
+            "CFBundleShortVersionString": "1.4.0",
+            "NSHighResolutionCapable": "True",
+            "NSRequiresAquaSystemAppearance": "False",
+        },
+    )
+

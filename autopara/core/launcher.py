@@ -70,8 +70,21 @@ def open_url(url: str | None) -> bool:
         log.info("shell open %s -> %s", target, "ok" if opened else "refused")
         return opened
 
+    if sys.platform == "darwin":
+        import subprocess
+
+        try:
+            res = subprocess.run(["open", target], capture_output=True, timeout=5)
+            opened = res.returncode == 0
+            log.info("macos open %s -> %s", target, "ok" if opened else "refused")
+            if opened:
+                return True
+        except Exception:
+            log.exception("failed to open %s via open command", target)
+
     try:
         return webbrowser.open(target, new=2)
     except Exception:  # pragma: no cover - platform dependent
         log.exception("failed to open %s", target)
         return False
+

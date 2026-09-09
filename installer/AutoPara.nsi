@@ -24,7 +24,7 @@ Unicode true
 ; Must stay identical to MainWindow.setWindowTitle(), or the "is it running?" check below silently
 ; never matches and the install writes over locked files. tests/test_installer.py asserts this.
 !define APP_DISPLAY  "AutoPara — автозапуск пар"
-!define APP_VERSION  "1.4.0"
+!define APP_VERSION  "1.5.0"
 !define APP_PUBLISHER "AutoPara"
 !define APP_EXE      "AutoPara.exe"
 !define UNINST_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"

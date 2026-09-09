@@ -1,8 +1,9 @@
 """Налаштування: сповіщення, поведінка з пропущеними парами, тема, автозапуск."""
 
-from __future__ import annotations
+import sys
 
 from PySide6.QtWidgets import (
+
     QButtonGroup,
     QCheckBox,
     QComboBox,
@@ -124,17 +125,25 @@ class SettingsDialog(QDialog):
         catchup_hint.setWordWrap(True)
         layout.addWidget(catchup_hint)
 
-        # ------------------------------------------------------------ автозапуск
-        self.autostart_check = QCheckBox("Запускати AutoPara разом із Windows")
+        if sys.platform == "darwin":
+            self.autostart_check = QCheckBox("Запускати AutoPara під час входу в систему")
+            hint_text = (
+                "Автозапуск додає AutoPara до об'єктів входу і запускає його згорнутим у "
+                "трей. Вимкнути можна також у Системних параметрах → Загальні → Об'єкти входу."
+            )
+        else:
+            self.autostart_check = QCheckBox("Запускати AutoPara разом із Windows")
+            hint_text = (
+                "Автозапуск додає AutoPara до автозавантаження Windows і запускає його згорнутим у "
+                "трей. Вимкнути можна також у Диспетчері завдань → Автозавантаження."
+            )
         layout.addWidget(self.autostart_check)
 
-        hint = QLabel(
-            "Автозапуск додає AutoPara до автозавантаження Windows і запускає його згорнутим у "
-            "трей. Вимкнути можна також у Диспетчері завдань → Автозавантаження."
-        )
+        hint = QLabel(hint_text)
         hint.setObjectName("FormHint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
+
 
         self.duration_hint = QLabel(
             "Тривалість пари впливає лише на пари, додані або імпортовані надалі."

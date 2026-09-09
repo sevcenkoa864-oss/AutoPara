@@ -15,6 +15,7 @@ log = logging.getLogger(__name__)
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 VALUE_NAME = "AutoPara"
+MAC_PLIST_PATH = Path.home() / "Library" / "LaunchAgents" / "com.autopara.app.plist"
 
 try:  # winreg exists only on Windows; keep the module importable elsewhere for tests.
     import winreg
@@ -31,7 +32,7 @@ def project_root() -> Path:
 
 
 def startup_command() -> str:
-    """The command the Run key should invoke, always starting hidden to the tray."""
+    """The command the Run key / startup should invoke, always starting hidden to the tray."""
     if is_frozen():
         return f'"{Path(sys.executable)}" --hidden'
     # From source, point at the .pyw entry script by absolute path: the Run key runs with an
@@ -43,7 +44,36 @@ def startup_command() -> str:
     return f'"{interpreter}" "{project_root() / "autopara_launch.pyw"}" --hidden'
 
 
+def _mac_plist_content() -> str:
+    if is_frozen():
+        program = str(Path(sys.executable).resolve())
+        args = [program, "--hidden"]
+    else:
+        executable = str(Path(sys.executable).resolve())
+        script = str((project_root() / "autopara_launch.pyw").resolve())
+        args = [executable, script, "--hidden"]
+
+    args_xml = "\n        ".join(f"<string>{arg}</string>" for arg in args)
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.autopara.app</string>
+    <key>ProgramArguments</key>
+    <array>
+        {args_xml}
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+"""
+
+
 def is_enabled() -> bool:
+    if sys.platform == "darwin":
+        return MAC_PLIST_PATH.is_file()
     if winreg is None:
         return False
     try:
@@ -58,6 +88,8 @@ def is_enabled() -> bool:
 
 
 def current_command() -> str | None:
+    if sys.platform == "darwin":
+        return startup_command() if MAC_PLIST_PATH.is_file() else None
     if winreg is None:
         return None
     try:
@@ -69,6 +101,14 @@ def current_command() -> str | None:
 
 
 def enable() -> bool:
+    if sys.platform == "darwin":
+        try:
+            MAC_PLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+            MAC_PLIST_PATH.write_text(_mac_plist_content(), encoding="utf-8")
+            return True
+        except OSError:
+            log.exception("could not enable autostart on macos")
+            return False
     if winreg is None:
         return False
     try:
@@ -81,6 +121,14 @@ def enable() -> bool:
 
 
 def disable() -> bool:
+    if sys.platform == "darwin":
+        try:
+            if MAC_PLIST_PATH.exists():
+                MAC_PLIST_PATH.unlink()
+            return True
+        except OSError:
+            log.exception("could not disable autostart on macos")
+            return False
     if winreg is None:
         return False
     try:
@@ -92,6 +140,7 @@ def disable() -> bool:
     except OSError:
         log.exception("could not disable autostart")
         return False
+
 
 
 def set_enabled(enabled: bool) -> bool:

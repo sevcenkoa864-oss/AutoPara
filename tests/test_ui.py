@@ -749,16 +749,25 @@ class TestImportLanding:
         takes the interpreter down with it. So every mime object made here is kept for the
         length of the test.
         """
+        import sys
         from PySide6.QtCore import QMimeData, QPoint, QUrl
         from PySide6.QtGui import QDropEvent
 
+
         mime = QMimeData()
-        mime.setUrls([QUrl.fromLocalFile(name) for name in names])
+        urls = []
+        for name in names:
+            if sys.platform != "win32" and "\\" in name:
+                urls.append(QUrl.fromLocalFile(name.replace("\\", "/")))
+            else:
+                urls.append(QUrl.fromLocalFile(name))
+        mime.setUrls(urls)
         self._alive = getattr(self, "_alive", [])
         self._alive.append(mime)
         return QDropEvent(
             QPoint(10, 10), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier, QEvent.Drop
         )
+
 
     def test_a_docx_drop_is_reported(self, gui_app):
         landing = ImportLanding()

@@ -26,7 +26,10 @@ PERSONALIZE_KEY = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize
 # Google Sans ships with the app (``ui/fonts``): Google released it on Google Fonts under the SIL
 # Open Font License, so it can be redistributed like any other open font. The Segoe entries are
 # what Windows falls back to if the bundled files ever fail to load.
-FONT_STACK = ("Google Sans", "Segoe UI Variable Text", "Segoe UI")
+import sys
+
+FONT_STACK = ("Google Sans", "Segoe UI Variable Text", "Segoe UI", "-apple-system", "Helvetica Neue", "Arial")
+
 
 try:  # winreg exists only on Windows; keep the module importable elsewhere for tests.
     import winreg
@@ -141,7 +144,23 @@ _active = THEME_LIGHT
 
 
 def system_theme() -> str:
-    """Windows' own app theme: ``AppsUseLightTheme = 0`` means the user is running dark mode."""
+    """Read the OS appearance: dark mode vs light mode."""
+    if sys.platform == "darwin":
+        try:
+            import subprocess
+
+            res = subprocess.run(
+                ["defaults", "read", "-g", "AppleInterfaceStyle"],
+                capture_output=True,
+                text=True,
+                timeout=1,
+            )
+            if res.returncode == 0 and res.stdout.strip() == "Dark":
+                return THEME_DARK
+            return THEME_LIGHT
+        except Exception:
+            return THEME_LIGHT
+
     if winreg is None:
         return THEME_LIGHT
     try:
@@ -150,6 +169,7 @@ def system_theme() -> str:
             return THEME_LIGHT if value else THEME_DARK
     except (FileNotFoundError, OSError):
         return THEME_LIGHT
+
 
 
 def resolve(theme: str) -> str:

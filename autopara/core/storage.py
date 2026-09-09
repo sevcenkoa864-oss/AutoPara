@@ -107,12 +107,21 @@ _DEFAULTS = {
 }
 
 
+import sys
+
+
 def default_db_path() -> Path:
-    """``%APPDATA%\\AutoPara\\autopara.db`` -- writable even when installed to Program Files."""
-    base = os.environ.get("APPDATA") or str(Path.home())
+    """Path to the SQLite database file: %APPDATA%\\AutoPara on Windows, Application Support on macOS."""
+    if os.environ.get("APPDATA"):
+        base = os.environ["APPDATA"]
+    elif sys.platform == "darwin":
+        base = str(Path.home() / "Library" / "Application Support")
+    else:
+        base = str(Path.home())
     directory = Path(base) / "AutoPara"
     directory.mkdir(parents=True, exist_ok=True)
     return directory / "autopara.db"
+
 
 
 def schedules_dir(db_path: str | Path | None = None) -> Path:
