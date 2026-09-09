@@ -146,7 +146,11 @@ into bugs by someone who hasn't seen the source document:
 
 - **Shared classes are real `w:gridSpan` merges, not repeated text.** Word stores a session taught to
   several groups as *one* `<w:tc>` spanning columns. Do not switch to comparing adjacent cell text —
-  that is only a fallback (`_dedupe_adjacent_duplicates`) for documents from other tooling.
+  that is only a fallback (`_dedupe_adjacent_duplicates`) for documents from other tooling. This is
+  about **columns**. Down the **rows** the opposite holds: a class retyped in the next time slot is
+  the same session, and comparing that text is the primary strategy (`_merge_consecutive_slots`, R12)
+  — a double class must be one lesson, or the browser opens again mid-meeting. Its adjacency test is
+  load-bearing: the same subject can legitimately run twice in one day with a gap.
 - **Never index cells positionally.** Rows contain different numbers of `<w:tc>` (4, 5, 7) because of
   merges. A cell's column is the running sum of preceding `gridSpan` values.
 - **A group owns a column *range*.** A header cell can itself span (course IV: 7 grid columns, 2
@@ -157,9 +161,9 @@ into bugs by someone who hasn't seen the source document:
   for Friday, and course headings mix Cyrillic `І` (U+0406) with Latin `V`. Match courses by ordinal
   position, never by heading string.
 
-Verified totals used as regression fixtures: **6 courses, 77 lessons, 60 with links, 17 without,
-per course 25/11/12/13/0/16**. Course V having no classes is real data, not a parse failure — empty
-schedules must stay a valid state throughout the stack.
+Verified totals used as regression fixtures: **6 courses, 61 lessons (77 table rows, joined into 61
+by R5/R12), 53 with links, 8 without, per course 24/10/8/10/0/9**. Course V having no classes is real
+data, not a parse failure — empty schedules must stay a valid state throughout the stack.
 
 ### Windows integration
 

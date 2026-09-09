@@ -78,16 +78,10 @@ class Lesson:
 
     @property
     def pair_span(self) -> int:
-        """How many consecutive pairs this lesson covers (a vMerge block covers several)."""
-        from ..importer.normalize import TIME_TO_PAIR
+        """How many consecutive pairs this lesson covers (a merged block covers several)."""
+        from ..importer.normalize import last_pair_covered
 
-        last = self.pair
-        for raw_time, pair in TIME_TO_PAIR.items():
-            hour, minute = raw_time.split(".")
-            slot = f"{int(hour):02d}:{minute}"
-            if self.start_time <= slot < self.end_time:
-                last = max(last, pair)
-        return max(1, last - self.pair + 1)
+        return max(1, last_pair_covered(self.start_time, self.end_time) - self.pair + 1)
 
     def starts_on(self, day: date) -> datetime:
         return datetime.combine(day, self.start)

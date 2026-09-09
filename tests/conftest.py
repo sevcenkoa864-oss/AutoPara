@@ -113,9 +113,11 @@ def hyperlink_element_count(schedule_path) -> int:
     """How many <w:hyperlink> elements the document contains.
 
     Each lesson cell carries at most one, and neither a gridSpan (shared class) nor a vMerge
-    continuation duplicates it, so this equals the number of lessons that should end up with a
-    link. Counting elements -- rather than unique URLs -- is what catches a link dropped from one
-    lesson while the same URL survives on another.
+    continuation duplicates it, so this equals the number of *cells* that should end up
+    contributing a link -- ``ParsedLesson.linked_cells`` summed over the parse. It is cells rather
+    than lessons because a class written into two adjacent slots holds one link per slot and merges
+    into a single lesson (BACKEND.md R12). Counting elements -- rather than unique URLs -- is what
+    catches a link dropped from one lesson while the same URL survives on another.
     """
     import zipfile
 

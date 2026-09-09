@@ -104,7 +104,8 @@ wants.
   look arbitrary — a 09:30 class sitting flush inside a cell labelled 09:00 says the label is a
   decoration.
 - "Today" is tinted; the current hour is marked.
-- A lesson spanning several hours (`BACKEND.md` R5) is one card, spanning them.
+- A lesson spanning several hours (`BACKEND.md` R5, R12) is one card, spanning them. A double class
+  is one card for the same reason it is one browser tab: it never stopped.
 
 ### One minute, a fixed number of pixels
 

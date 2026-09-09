@@ -17,20 +17,46 @@ from autopara.importer.normalize import (
     detect_provider,
     find_urls,
     is_course_heading,
+    last_pair_covered,
     pair_from_time,
     pair_slot,
     pair_start_time,
     parse_time,
     parse_time_range,
 )
+from autopara.importer.schedule_parser import ParsedLesson, _merge_consecutive_slots
+
+
+def make_parsed(
+    pair: int,
+    subject: str = "Загальна педагогіка",
+    teacher: str = "(Роман Н.М.)",
+    url: str | None = "https://zoom.us/j/1",
+    groups: tuple[str, ...] = ("11 група", "12 група"),
+    day: int = 0,
+) -> ParsedLesson:
+    """One slot's worth of lesson, so the R12 rules can be tested without the document."""
+    start = pair_start_time(pair)
+    return ParsedLesson(
+        day_index=day,
+        pair=pair,
+        start_time=start,
+        end_time=add_minutes(start, 80),
+        subject=subject,
+        teacher=teacher,
+        url=url,
+        provider=detect_provider(url),
+        group_names=list(groups),
+        linked_cells=1 if url else 0,
+    )
 
 # Structural fixtures: these describe how the parser resolves merges, and hold for every revision
 # of this timetable. The *number of links* deliberately is not fixed here -- the university fills
 # missing links in over time (60 -> 63 between two revisions), so an exact count is a test that
 # fails on a document change rather than on a code change. Links are checked against the document
 # itself instead; see TestLinkExtraction.
-EXPECTED_TOTAL = 77
-EXPECTED_PER_COURSE = [25, 11, 12, 13, 0, 16]
+EXPECTED_TOTAL = 61
+EXPECTED_PER_COURSE = [24, 10, 8, 10, 0, 9]
 
 
 class TestDocumentTotals:
@@ -119,6 +145,92 @@ class TestMergeHandling:
             assert block.end_time > "09:20"
             assert not block.url, "the elective block has no link"
 
+    def test_a_repeated_class_is_one_block_in_the_document(self, courses):
+        """Course II's Monday class is written into two slots; it is one session (R12)."""
+        monday = [
+            lesson
+            for lesson in courses[1].lessons
+            if lesson.day_index == 0 and "Історія і теорія" in lesson.subject
+        ]
+        assert len(monday) == 1
+        assert (monday[0].start_time, monday[0].end_time) == ("09:30", "12:40")
+        assert monday[0].pair == 2, "a merged block keeps the first slot's pair (source_key)"
+
+
+class TestConsecutiveSlotMerging:
+    """R12, without the document: the same class in two adjacent slots does not stop between them."""
+
+    def test_two_adjacent_identical_slots_become_one(self):
+        merged = _merge_consecutive_slots([make_parsed(2), make_parsed(3)])
+        assert len(merged) == 1
+        assert (merged[0].pair, merged[0].start_time, merged[0].end_time) == (2, "09:30", "12:40")
+        assert merged[0].linked_cells == 2, "both cells carried the link"
+
+    def test_a_run_of_three_slots_chains(self):
+        merged = _merge_consecutive_slots([make_parsed(2), make_parsed(3), make_parsed(4)])
+        assert len(merged) == 1
+        assert merged[0].end_time == "14:20"
+
+    def test_the_same_subject_with_a_gap_stays_two_lessons(self):
+        """The load-bearing case: a class can run twice in one day with a break between."""
+        merged = _merge_consecutive_slots([make_parsed(3), make_parsed(5)])
+        assert len(merged) == 2
+        assert [lesson.pair for lesson in merged] == [3, 5]
+
+    def test_a_different_teacher_is_a_different_class(self):
+        merged = _merge_consecutive_slots([make_parsed(2), make_parsed(3, teacher="(Інший І.І.)")])
+        assert len(merged) == 2
+
+    def test_a_different_link_is_a_different_meeting(self):
+        merged = _merge_consecutive_slots(
+            [make_parsed(2), make_parsed(3, url="https://zoom.us/j/2")]
+        )
+        assert len(merged) == 2
+
+    def test_a_blank_link_in_the_second_slot_is_inherited(self):
+        """The author often writes the link only on the first row of a double class."""
+        merged = _merge_consecutive_slots([make_parsed(2), make_parsed(3, url=None)])
+        assert len(merged) == 1
+        assert merged[0].url == "https://zoom.us/j/1"
+        assert merged[0].provider == "zoom"
+        assert not merged[0].needs_link
+        assert merged[0].linked_cells == 1, "only one cell held a link"
+
+    def test_a_link_appearing_only_in_the_second_slot_is_adopted(self):
+        merged = _merge_consecutive_slots([make_parsed(2, url=None), make_parsed(3)])
+        assert len(merged) == 1
+        assert merged[0].url == "https://zoom.us/j/1"
+        assert merged[0].provider == "zoom"
+
+    def test_a_blank_teacher_is_inherited(self):
+        merged = _merge_consecutive_slots([make_parsed(2, teacher=""), make_parsed(3)])
+        assert len(merged) == 1
+        assert merged[0].teacher == "(Роман Н.М.)"
+
+    def test_different_group_sets_never_merge(self):
+        """Group membership must not change halfway through a block."""
+        merged = _merge_consecutive_slots(
+            [make_parsed(2), make_parsed(3, groups=("11 група",))]
+        )
+        assert len(merged) == 2
+
+    def test_different_days_never_merge(self):
+        merged = _merge_consecutive_slots([make_parsed(6, day=0), make_parsed(1, day=1)])
+        assert len(merged) == 2
+
+    def test_a_vmerged_block_absorbs_a_retyped_row_after_it(self):
+        """Adjacency is measured from the last pair the block covers, not from its first."""
+        block = make_parsed(2)
+        block.end_time = "12:40"  # a vMerge already carried it across pair 3
+        merged = _merge_consecutive_slots([block, make_parsed(4)])
+        assert len(merged) == 1
+        assert merged[0].end_time == "14:20"
+
+    def test_last_pair_covered_reads_the_span(self):
+        assert last_pair_covered("09:30", "10:50") == 2
+        assert last_pair_covered("09:30", "12:40") == 3
+        assert last_pair_covered("08:00", "17:30") == 6
+
 
 class TestLinkExtraction:
     def test_links_are_not_duplicated(self, lessons):
@@ -151,10 +263,11 @@ class TestLinkExtraction:
         """Guards against losing a link from one lesson while the same URL survives on another.
 
         The document reuses ~20 URLs across ~60 lessons, so comparing sets of URLs cannot see a
-        per-lesson loss; comparing counts can.
+        per-lesson loss; counting the *cells* that carried a link can. It is cells rather than
+        lessons because a double class holds one link per slot and merges into a single lesson
+        (R12), so ``linked_cells`` is what stays equal to the document's own element count.
         """
-        linked = [lesson for lesson in lessons if lesson.url]
-        assert len(linked) == hyperlink_element_count
+        assert sum(lesson.linked_cells for lesson in lessons) == hyperlink_element_count
 
     def test_every_link_is_reachable_from_some_lesson(self, lessons, hyperlink_targets):
         """A link that parses but attaches to no lesson would never open."""

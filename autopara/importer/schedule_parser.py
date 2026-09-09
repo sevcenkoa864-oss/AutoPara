@@ -5,6 +5,7 @@ Implements the rules documented in docs/BACKEND.md section 2. The two that matte
 * **R2** a group owns a *range* of logical columns, and a lesson cell belongs to every group whose
   range it overlaps -- that is how one shared session maps to several groups.
 * **R5** a vertically merged lesson cell is a single block spanning several pairs.
+* **R12** the same class retyped in the next slot is that same block written the long way.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from .normalize import (
     find_urls,
     is_course_heading,
     is_teacher_line,
+    last_pair_covered,
     normalize_text,
     pair_from_time,
     pair_slot,
@@ -52,6 +54,10 @@ class ParsedLesson:
     url: str | None
     provider: str
     group_names: list[str]
+    # How many source cells carried a link. Merging collapses cells, so this -- not the number of
+    # lessons -- is what the link oracle in tests compares against the document's <w:hyperlink>
+    # count; see docs/BACKEND.md section 1.
+    linked_cells: int = 0
 
     @property
     def needs_link(self) -> bool:
@@ -158,10 +164,71 @@ def _dedupe_adjacent_duplicates(lessons: list[ParsedLesson]) -> list[ParsedLesso
             merged[key] = lesson
             order.append(key)
         else:
+            existing.linked_cells += lesson.linked_cells
             for name in lesson.group_names:
                 if name not in existing.group_names:
                     existing.group_names.append(name)
     return [merged[key] for key in order]
+
+
+def _compatible_text(left: str, right: str) -> bool:
+    """Equal, or one side left blank -- the block then inherits the filled one (R12)."""
+    first, second = normalize_text(left or ""), normalize_text(right or "")
+    return not first or not second or first.casefold() == second.casefold()
+
+
+def _continues(block: ParsedLesson, following: ParsedLesson) -> bool:
+    """Is ``following`` the same session as ``block``, carrying on into the next slot (R12)?
+
+    Day, groups and subject are the caller's dict key; what is left is the identity that may be
+    written only once across the two cells, and the adjacency test.
+    """
+    if sorted(block.group_names) != sorted(following.group_names):
+        return False
+    if not _compatible_text(block.teacher, following.teacher):
+        return False
+    if block.url and following.url and block.url != following.url:
+        return False
+    if following.start_time < block.end_time:
+        return False
+    # Adjacency is a slot rule, never "this subject appears twice today": the same class can
+    # legitimately run twice on one day with a gap between the sessions, and those are two lessons.
+    # Comparing against the *last* pair the block covers is what lets 2->3->4 chain.
+    return (
+        following.pair == last_pair_covered(block.start_time, block.end_time) + 1
+        or following.start_time == block.end_time
+    )
+
+
+def _merge_consecutive_slots(lessons: list[ParsedLesson]) -> list[ParsedLesson]:
+    """R12: one class written into two adjacent slots is one session, not two.
+
+    A double class reaches the parser either as a vMerge block (already handled while walking the
+    rows) or as the cell simply retyped in the next slot. Both mean the same thing -- the class does
+    not stop and nobody leaves it -- so the second slot extends the first rather than becoming a
+    lesson of its own that opens a second browser tab an hour into the meeting.
+    """
+    kept: list[ParsedLesson] = []
+    open_blocks: dict[tuple, ParsedLesson] = {}  # (day, groups, subject) -> block still open
+    for lesson in lessons:
+        key = (
+            lesson.day_index,
+            tuple(sorted(lesson.group_names)),
+            normalize_text(lesson.subject).casefold(),
+        )
+        block = open_blocks.get(key)
+        if block is not None and _continues(block, lesson):
+            block.end_time = max(block.end_time, lesson.end_time)
+            if not block.teacher:
+                block.teacher = lesson.teacher
+            if not block.url and lesson.url:
+                block.url = lesson.url
+                block.provider = detect_provider(lesson.url)
+            block.linked_cells += lesson.linked_cells
+            continue
+        kept.append(lesson)
+        open_blocks[key] = lesson
+    return kept
 
 
 def _parse_table(table: Table, ordinal: int, name: str, class_minutes: int) -> ParsedCourse:
@@ -236,6 +303,7 @@ def _parse_table(table: Table, ordinal: int, name: str, class_minutes: int) -> P
                 url=url,
                 provider=detect_provider(url),
                 group_names=_groups_for(cell, course.groups),
+                linked_cells=1 if url else 0,
             )
             lessons.append(lesson)
             if cell.vmerge == "restart":
@@ -243,7 +311,7 @@ def _parse_table(table: Table, ordinal: int, name: str, class_minutes: int) -> P
             else:
                 open_blocks.pop(cell.column, None)
 
-    course.lessons = _dedupe_adjacent_duplicates(lessons)
+    course.lessons = _merge_consecutive_slots(_dedupe_adjacent_duplicates(lessons))
     return course
 
 

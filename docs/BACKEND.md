@@ -19,26 +19,31 @@ Its structure, **verified by parsing the actual file** rather than assumed:
 | Metric | Value |
 |---|---|
 | Courses / tables | 6 |
-| Total lesson events | **77** |
-| Events with a link | 60 (revision-dependent, **not** asserted) |
-| Events without a link | 17 (revision-dependent, **not** asserted) |
-| Per course (I..VI) | 25, 11, 12, 13, **0**, 16 |
-| Distinct hyperlink relationships | 60 elements, 20 unique URLs |
-| Providers | 49 Zoom, 11 Google Meet |
+| Total lesson events | **61** |
+| Rows in the tables, before R5/R12 blocks are joined | 77 |
+| Events spanning more than one slot | 15 |
+| Events with a link | 53 (revision-dependent, **not** asserted) |
+| Events without a link | 8 (revision-dependent, **not** asserted) |
+| Per course (I..VI) | 24, 10, 8, 10, **0**, 9 |
+| Distinct hyperlink relationships | 63 elements, 21 unique URLs |
+| Providers | 44 Zoom, 9 Google Meet |
 
 > **Link counts are not regression fixtures.** The university fills missing links in over time --
 > between two revisions of this document the linked total moved 60 -> 63 while the structure was
 > byte-identical. Hard-coding the count produces a test that fails on a *document* change rather
 > than a *code* change, so the link tests compare against the document itself instead:
 >
-> * `test_link_count_matches_the_document` -- linked lessons == the number of `<w:hyperlink>`
->   elements. Catches a link dropped from one lesson (which a URL-set comparison cannot see,
->   because ~20 URLs are shared across ~60 lessons).
+> * `test_link_count_matches_the_document` -- `sum(lesson.linked_cells)` == the number of
+>   `<w:hyperlink>` elements. Catches a link dropped from one lesson (which a URL-set comparison
+>   cannot see, because ~20 URLs are shared across ~60 lessons). It counts *cells* rather than
+>   lessons because a double class carries a link in each of its slots and R12 merges those slots
+>   into one lesson; `ParsedLesson.linked_cells` records how many linked cells folded in, so the
+>   equality stays exact instead of being relaxed to an inequality.
 > * `test_parser_finds_exactly_the_links_the_document_contains` -- the set of parsed URLs equals
 >   the set of relationship targets. Catches mangled or invented URLs.
 >
 > Both oracles read the `.docx` zip directly and share no code with the importer. The structural
-> numbers above (77 lessons, per-course counts) *are* asserted: they describe merge handling and
+> numbers above (61 lessons, per-course counts) *are* asserted: they describe merge handling and
 > hold across every revision seen so far.
 
 Course V (`51 група`) legitimately has **no classes at all** — an empty schedule is a valid state,
@@ -66,6 +71,9 @@ columns. That is the wrong primary strategy for this document: Word stores the s
 merged cell, so there is no repeated text to find. Duplicate-text detection remains only as a
 defensive fallback (`_dedupe_adjacent_duplicates`) for documents produced by other tooling.
 
+This is a statement about **columns only**. Down the *rows* the document really does repeat text --
+see R12 -- and comparing it there is the primary strategy, not a fallback.
+
 **R3 — Links live in two places.**
 A URL appears both as a `<w:hyperlink r:id="rIdN">` (resolved through
 `word/_rels/document.xml.rels`) **and** as visible run text. Collect both, then dedupe
@@ -80,6 +88,27 @@ the rest, with **no text** in the continuation cells. The parser carries the las
 following `continue` rows (e.g. `Дисципліни вільного вибору` covers 4–6 consecutive pairs); its end
 time extends to the end of the last continued row. A `restart` cell with **no** content is just
 merged empty space and is ignored.
+
+**R12 — A class repeated in the next slot is still one class.**
+The author writes a double class two ways: as the vMerge block of R5, or by simply retyping the cell
+in the next row. Both mean the same thing — the class does not stop and nobody leaves it — so
+`_merge_consecutive_slots` folds the second slot into the first, which keeps the first slot's `pair`
+and `start_time` and takes the last slot's `end_time`. Without it the scheduler opens a second
+browser tab an hour and a half into a meeting the user is already sitting in, and the grid draws two
+cards with a gap between them. 12 blocks in the reference document merge this way, 77 rows → 61
+lessons.
+
+Two rows merge when the day, the group set and the subject match, and the teacher and URL are
+*compatible* — equal, or blank on one side, because the link is often written only on the first row.
+The block then inherits whichever value was filled.
+
+Adjacency is the load-bearing part, and it is a **slot** rule: the next row's pair must be exactly
+one past the last pair the block already covers, or it must start exactly when the block ends. It is
+never "this subject appears twice today" — course IV's Friday runs *Формування мистецько-творчої
+компетентності* at pairs 2, 3 and 5, and that is a merged 09:30–12:40 block plus a genuinely
+separate afternoon session. Measuring from the *last* pair covered (`normalize.last_pair_covered`)
+rather than from the block's own `pair` is what lets a run of three chain, and what lets an R5 vMerge
+block absorb a retyped row after it.
 
 **R6 — Pair inference.**
 `Пара` is blank on one row. The `Час` -> `Пара` mapping is perfectly consistent and is the source of
@@ -97,7 +126,8 @@ lesson is expected to fall inside, and the regression fixtures still assert `1 <
 Since the grid became time-proportional (`FRONTEND.md`, "One minute, one pixel") `pair` no longer
 decides where anything is drawn. It survives because it is part of `source_key`, which is what
 lets a re-imported class keep its row id: two evening classes on the same day need different pair
-numbers or they collide.
+numbers or they collide. A lesson's `pair` is therefore always the slot it *starts* in; an R5 or R12
+block covers several, and `last_pair_covered` is what reads the far end.
 
 **R7 — Classes without links.**
 17 cells have a subject and teacher but no URL (e.g. `(див. розклад на сайті ХНПУ)`). They are
@@ -149,7 +179,7 @@ groups(id INTEGER PK, course_id -> courses.id, name TEXT,
 
 lessons(id INTEGER PK, course_id -> courses.id,
         day_index INTEGER,        -- 0=Mon … 6=Sun
-        pair INTEGER,             -- 1..6
+        pair INTEGER,             -- 1..6, the slot the lesson *starts* in (R5/R12 span several)
         start_time TEXT,          -- 'HH:MM'
         end_time TEXT,            -- 'HH:MM'
         subject TEXT, teacher TEXT,

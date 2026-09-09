@@ -201,6 +201,21 @@ def pair_slot(hhmm: str) -> int:
     return slot
 
 
+def last_pair_covered(start_time: str, end_time: str) -> int:
+    """The highest pair slot that begins inside ``[start, end)`` (R5, R12).
+
+    A single-slot lesson covers only its own pair; a block that spans several -- whether through a
+    vMerge or through the same class being retyped in the next slot -- covers all of them. The pair
+    one past this is what a following slot has to be for the block to continue.
+    """
+    last = pair_slot(start_time)
+    for pair in PAIR_TO_TIME:
+        slot = pair_start_time(pair)
+        if start_time <= slot < end_time:
+            last = max(last, pair)
+    return last
+
+
 def add_minutes(hhmm: str, minutes: int) -> str:
     """Add minutes to an ``HH:MM`` string, clamping at the end of the day."""
     hour, minute = (int(part) for part in hhmm.split(":"))
