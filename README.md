@@ -50,7 +50,7 @@ winget install NSIS.NSIS              # once
 
 | File | Size | What it is |
 |---|---|---|
-| `dist\AutoPara-1.3.0-Setup.exe` | 35.0 MB | NSIS installer — hand this to someone who does not have the repository. |
+| `dist\AutoPara-1.4.0-Setup.exe` | 35.0 MB | NSIS installer — hand this to someone who does not have the repository. |
 | `dist\AutoPara\` | 126 MB folder | The unpacked app, if you'd rather not install. |
 
 `.\build.cmd -SkipApp` rebuilds only the installer from an existing `dist\AutoPara\`.
