@@ -55,6 +55,13 @@ winget install NSIS.NSIS              # once
 
 `.\build.cmd -SkipApp` rebuilds only the installer from an existing `dist\AutoPara\`.
 
+You do not have to build it to publish it: pushing to `main` runs the same `build.cmd` on a Windows
+runner and attaches the installer to a GitHub release
+([`.github/workflows/installer.yml`](.github/workflows/installer.yml)). The release is cut from
+`APP_VERSION` in `installer/AutoPara.nsi`, and only when that version has no tag yet — so **bump
+that number in the commit you want released.** A push that leaves it alone still builds, and the
+installer is downloadable from the run's artifacts.
+
 **Run `build.cmd`, not `build.ps1` directly.** Windows refuses to run `.ps1` files at all under its
 default execution policy, so `.\build.ps1` fails with *UnauthorizedAccess* on any machine nobody
 has configured. `build.cmd` lifts that for the single process it starts — it changes no setting,

@@ -196,6 +196,27 @@ Two stages, both runnable on their own:
 2. **`makensis installer\AutoPara.nsi`** -> `dist\AutoPara-1.1.0-Setup.exe` (~35 MB, LZMA solid).
    Requires NSIS (`winget install NSIS.NSIS`).
 
+### The installer that people download is built by CI
+
+`.github/workflows/installer.yml` runs those same two stages on a clean `windows-latest` runner on
+every push to `main`, and attaches `AutoPara-<version>-Setup.exe` to a GitHub release. It calls
+`build.cmd`, not a copy of its steps, so CI cannot pass along a path a local build does not take.
+
+**The version in `installer/AutoPara.nsi` decides whether a release is cut.** The job reads
+`APP_VERSION`, and creates the release only when no `v<version>` tag exists yet; a push that leaves
+the number alone still builds and still uploads the `.exe` as a workflow artifact, it just does not
+try to publish a second release under a tag that is taken. Releasing a change therefore means
+bumping `APP_VERSION` in the commit that makes it. That number is already the single source of the
+version -- it names the `OutFile`, the Add/Remove Programs entry and `VIProductVersion` -- and
+anything in the workflow that tracked a version of its own would drift from the file the build
+actually reads.
+
+The suite runs before the build, and a failure stops the release. What it can check there is
+limited: the real timetable is not in the repository, so the 100+ document-backed parser tests
+**skip** on the runner exactly as they do on a machine that has lost the file. CI guards the rest --
+imports, the scheduler, the widgets, `tests/test_installer.py`'s agreement between the `.nsi` and
+the app -- not the parser.
+
 ## Reinstalling replaces; uninstalling removes everything
 
 Both installers **delete before they write**. Copying a new version over an old one leaves behind

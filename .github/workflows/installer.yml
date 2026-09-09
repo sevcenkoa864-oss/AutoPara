@@ -1,0 +1,137 @@
+# Builds the Windows installer on every push to main and publishes it as a GitHub release.
+#
+# The installer used to be built by hand on the maintainer's machine, which meant the download
+# link in the README could point at a build nobody could reproduce. This job runs the same two
+# stages `build.cmd` runs locally -- PyInstaller, then makensis -- on a clean Windows runner.
+#
+# A release is cut when APP_VERSION in installer/AutoPara.nsi names a version that has no tag yet.
+# Pushing to main without touching that number still builds and still uploads the .exe as a
+# workflow artifact; it just does not create a second release under a tag that already exists.
+# So: bump APP_VERSION in the same commit as the change you want released.
+
+name: Installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create the release and upload the .exe to it
+
+# Two pushes in quick succession would otherwise race to create the same tag.
+concurrency:
+  group: installer-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the version from the installer script
+        id: version
+        shell: pwsh
+        run: |
+          # installer/AutoPara.nsi is the single source of the version number: it names the
+          # OutFile, the Add/Remove Programs entry and VIProductVersion. Anything here that
+          # tracked a version of its own would drift from the file the build actually reads.
+          $script = Get-Content installer/AutoPara.nsi -Raw
+          if ($script -notmatch '(?m)^!define\s+APP_VERSION\s+"([^"]+)"') {
+              throw "APP_VERSION not found in installer/AutoPara.nsi"
+          }
+          $version = $Matches[1]
+          "version=$version"                >> $env:GITHUB_OUTPUT
+          "tag=v$version"                   >> $env:GITHUB_OUTPUT
+          "setup=AutoPara-$version-Setup.exe" >> $env:GITHUB_OUTPUT
+          Write-Host "APP_VERSION = $version"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13' # the version the app is developed and tested against
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          # Not in requirements.txt: neither is needed to run the app, only to build and check it.
+          python -m pip install pyinstaller pytest
+
+      - name: Run the tests
+        shell: pwsh
+        # The parser's regression fixture is the real timetable, which is not in the repository
+        # (it holds live meeting links), so the 100+ document-backed tests SKIP here and the run
+        # still reads green. This step guards the rest of the suite -- imports, the scheduler, the
+        # Qt widgets, the installer script's agreement with the app -- not the parser.
+        run: python -m pytest -q
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          # Present on some runner images and not others; build.ps1 looks in both Program Files
+          # locations, which is where either route puts it.
+          $makensis = @(
+              "$env:ProgramFiles\NSIS\makensis.exe"
+              "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($makensis) {
+              Write-Host "NSIS already present: $makensis"
+          } else {
+              choco install nsis --no-progress -y
+          }
+
+      - name: Build the application bundle and the installer
+        shell: pwsh
+        # The same entry point a maintainer double-clicks, so CI cannot pass on a path that a
+        # local build does not take. It renders build\AutoPara.ico first: without it the exe --
+        # and every shortcut pointing at it -- carries PyInstaller's stock Python icon.
+        run: .\build.cmd
+
+      - name: Check the installer was produced
+        shell: pwsh
+        run: |
+          $setup = "dist/${{ steps.version.outputs.setup }}"
+          if (-not (Test-Path $setup)) { throw "$setup was not built" }
+          "{0} {1:N1} MB" -f $setup, ((Get-Item $setup).Length / 1MB)
+
+      # Uploaded whether or not a release is cut, so any build off main can be downloaded and
+      # tried without a version bump.
+      - name: Upload the installer as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AutoPara-${{ steps.version.outputs.version }}-Setup
+          path: dist/${{ steps.version.outputs.setup }}
+          if-no-files-found: error
+
+      - name: Publish the release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+
+          # "No release found" is an answer, not a failure, so this one probe runs with the
+          # step's stop-on-error preference lifted and is judged by its exit code alone.
+          $ErrorActionPreference = "Continue"
+          gh release view $tag *> $null
+          $released = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = "Stop"
+
+          if ($released) {
+              Write-Host "$tag is already released; bump APP_VERSION in installer/AutoPara.nsi to cut a new one."
+              exit 0
+          }
+          $notes = @"
+          Встановлення: завантажте **${{ steps.version.outputs.setup }}** нижче та запустіть його.
+          Нічого більше встановлювати не треба — ні Python, ні інших програм.
+
+          Зібрано з ${{ github.sha }}.
+          "@
+          gh release create $tag "dist/${{ steps.version.outputs.setup }}" `
+              --title "AutoPara ${{ steps.version.outputs.version }}" `
+              --notes $notes

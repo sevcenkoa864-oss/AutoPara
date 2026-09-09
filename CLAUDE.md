@@ -28,6 +28,11 @@ python -m autopara --hidden            # start to tray with no window (the autos
 
 No linter or formatter is configured; match the surrounding style.
 
+`.github/workflows/installer.yml` runs `build.cmd` on `windows-latest` for every push to `main` and
+attaches the installer to a GitHub release — but only when `APP_VERSION` in `installer/AutoPara.nsi`
+names a version with no `v<version>` tag yet. **Bump that number in the commit you want released**;
+otherwise the build still runs and the .exe is only a workflow artifact. See `docs/ARCHITECTURE.md`.
+
 ### Test environment
 
 - Tests need the **real schedule `.docx`, which is not in the repo** (it holds live meeting links).
